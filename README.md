@@ -1,4 +1,4 @@
-# rtlsdr-ft8 -- FT8 daemon for RTL receivers
+# rtlsdr-ft8d -- FT8 daemon for RTL receivers
 
 ## TL;DR
 
