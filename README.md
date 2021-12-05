@@ -1,6 +1,6 @@
 # rtlsdr-ft8d -- FT8 daemon for RTL receivers
 
-*WIP -- I just started this project, it's not yet working...*
+*WIP -- Need help for testing this project*
 
 ![rtlsdr-wsprd](art/rtlsdr-ft8d-web.jpg)
 
