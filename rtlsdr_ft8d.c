@@ -60,14 +60,14 @@
 
 // uint32_t = RPi targeted hw/os, not sure if hardcoding this is a good practice
 #define SIGNAL_LENGHT       (uint32_t)15
-#define SIGNAL_SAMPLE_RATE  (uint32_t)12000                                 // UPDATE to 4000 or 3000 (iq = 3kHz BW)
-#define SIGNAL_NUM_SAMPLES  (uint32_t)SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE
+#define SIGNAL_SAMPLE_RATE  (uint32_t)12000                                    // UPDATE to 4000 or 3000 (iq = 3kHz BW)
+#define SIGNAL_NUM_SAMPLES  (uint32_t)SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE       // 180000
 #define SAMPLING_RATE       (uint32_t)2400000
-#define FS4_RATE            (uint32_t)(SAMPLING_RATE / 4)                   // = 600 kHz
-#define DOWNSAMPLING        (uint32_t)(SAMPLING_RATE / SIGNAL_SAMPLE_RATE)  // = 200
-#define DEFAULT_BUF_LENGTH  (uint32_t)(4 * 16384)                           // = 65536
+#define FS4_RATE            (uint32_t)(SAMPLING_RATE / 4)                      // = 600 kHz
+#define DOWNSAMPLING        (uint32_t)(SAMPLING_RATE / SIGNAL_SAMPLE_RATE)     // = 200
+#define DEFAULT_BUF_LENGTH  (uint32_t)(4 * 16384)                              // = 65536
 
-#define K_MIN_SCORE         (uint32_t)10                                    // Minimum sync score threshold for candidates
+#define K_MIN_SCORE         (uint32_t)10                                       // Minimum sync score threshold for candidates
 #define K_MAX_CANDIDATES    (uint32_t)120
 #define K_LDPC_ITERS        (uint32_t)20
 #define K_MAX_MESSAGES      (uint32_t)50
@@ -75,12 +75,12 @@
 #define K_TIME_OSR          (uint32_t)2
 #define K_FSK_DEV           (uint32_t)6.25
 
-#define NUM_BIN             (uint32_t)(SIGNAL_SAMPLE_RATE / (2 * K_FSK_DEV))
-#define BLOCK_SIZE          (uint32_t)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)
-#define SUB_BLOCK_SIZE      (uint32_t)(BLOCK_SIZE / K_TIME_OSR)
-#define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)
-#define NUM_BLOCKS          (uint32_t)((SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE)
-#define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN)
+#define NUM_BIN             (uint32_t)(SIGNAL_SAMPLE_RATE / (2 * K_FSK_DEV))   // 1000
+#define BLOCK_SIZE          (uint32_t)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)         // 2000
+#define SUB_BLOCK_SIZE      (uint32_t)(BLOCK_SIZE / K_TIME_OSR)                // 1000
+#define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)                // 4000
+#define NUM_BLOCKS          (uint32_t)((SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE) // 88
+#define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN) // 352000
 
 
 /* Global declaration for these structs */
@@ -850,7 +850,13 @@ int main(int argc, char **argv) {
 }
 
 
-/* FT8 decoding stuff */
+/*
+ * FT8 Protocol doc high level
+ * - https://physics.princeton.edu/pulsar/k1jt/FT4_FT8_QEX.pdf
+ * - http://laarc.weebly.com/uploads/7/3/2/9/73292865/ft8syncv8.pdf
+ * - http://www.sportscliche.com/wb2fko/WB2FKO_TAPR_revised.pdf
+ */
+
 
 float hann_i(int i, int N) {
     float x = sinf((float)M_PI * i / N);
@@ -858,7 +864,7 @@ float hann_i(int i, int N) {
 }
 
 
-// Compute FFT magnitudes (log power) for each timeslot in the signal
+/* Compute FFT magnitudes (log power) for each timeslot in the signal */
 void extract_power(float *idat, float *qdat, uint8_t *mag_power) {
 
     const int len_window = 1.8f * BLOCK_SIZE;  // hand-picked and optimized
@@ -949,7 +955,8 @@ void ft8_subsystem(float *idat,
         .num_bins = NUM_BIN,
         .time_osr = K_TIME_OSR,
         .freq_osr = K_FREQ_OSR,
-        .mag = mag_power};
+        .mag = mag_power
+    };
     extract_power(idat, qdat, mag_power);
 
     // Find top candidates by Costas sync score and localize them in time and frequency
