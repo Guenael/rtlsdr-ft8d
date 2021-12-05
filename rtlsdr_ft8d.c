@@ -574,7 +574,7 @@ int main(int argc, char** argv) {
                 rx_options.dialfreq = 3592600.0;
             } else if (!strcasecmp(optarg, "60m")) {
                 rx_options.dialfreq = 5287200.0;
-             } else if (!strcasecmp(optarg, "40m")) {
+            } else if (!strcasecmp(optarg, "40m")) {
                 rx_options.dialfreq = 7038600.0;
             } else if (!strcasecmp(optarg, "30m")) {
                 rx_options.dialfreq = 10138700.0;

@@ -1,6 +1,13 @@
-# WIP rtlsdr-ft8d -- FT8 daemon for RTL receivers
+# rtlsdr-ft8d -- FT8 daemon for RTL receivers
 
-*Not working yet...*
+*WIP -- I just started this project, it's not yet working...*
+
+![rtlsdr-wsprd](art/rtlsdr-ft8d-web.jpg)
+
+![Workflow Status](https://img.shields.io/github/workflow/status/Guenael/rtlsdr-ft8d/CI)
+![Last commit](https://img.shields.io/github/last-commit/Guenael/rtlsdr-ft8d)
+![Commit activity](https://img.shields.io/github/commit-activity/m/Guenael/rtlsdr-ft8d)
+![Repo stars](https://img.shields.io/github/stars/Guenael/rtlsdr-ft8d?style=social) (no stars, sad...)
 
 ## TL;DR
 
@@ -28,7 +35,6 @@ This application written in C does:
 - Report any spots on TBD
 - Repeat, again and again...
 
-
 ## Installation
   1. Install a Linux compatible distro on your device (ex. Raspbian for RaspberryPi)
   1. Install dependencies & useful tools (for example, NTP for time synchronization). Example with a Debian based like Raspbian:
@@ -50,7 +56,6 @@ This application written in C does:
      rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29
      ```
 
-
 ## Tips (for Raspberry Pi)
   - Use ferrite bead on the USB cable to limit the interferences
   - Use an external clean power supply
@@ -60,7 +65,6 @@ This application written in C does:
     ```
   - Remove unused modules (for example, /etc/modules: #snd-bcm2835)
   - Use an enclose, and ground it
-
 
 ## Crystal stability
 
