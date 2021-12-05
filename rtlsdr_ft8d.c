@@ -950,7 +950,7 @@ void ft8_subsystem(float *idat,
         .time_osr = K_TIME_OSR,
         .freq_osr = K_FREQ_OSR,
         .mag = mag_power};
-    extract_power(idat, qdat, &mag_power);
+    extract_power(idat, qdat, mag_power);
 
     // Find top candidates by Costas sync score and localize them in time and frequency
     candidate_t candidate_list[K_MAX_CANDIDATES];
