@@ -259,64 +259,7 @@ static void *rtlsdr_rx(void *arg) {
 
 
 void postSpots(uint32_t n_results) {
-    CURL *curl;
-    CURLcode res;
-    char url[256];
-
-    time_t rawtime;
-    time(&rawtime);
-    struct tm *gtm = gmtime(&rawtime);
-
-    for (uint32_t i = 0; i < n_results; i++) {
-        snprintf(url, sizeof(url) - 1, "http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.2r_wsprd&mode=2",
-                 dec_options.rcall,
-                 dec_options.rloc,
-                 dec_results[i].freq,
-                 dec_options.date,
-                 dec_options.uttime,
-                 dec_results[i].snr,
-                 dec_results[i].dt,
-                 dec_results[i].freq,
-                 dec_results[i].call,
-                 dec_results[i].loc,
-                 dec_results[i].pwr);
-
-        printf("Spot :  %04d-%02d-%02d %02d:%02d:%02d %6.2f %6.2f %10.6f %2d %7s %6s %2s\n",
-               gtm->tm_year + 1900,
-               gtm->tm_mon + 1,
-               gtm->tm_mday,
-               gtm->tm_hour,
-               gtm->tm_min,
-               gtm->tm_sec,
-               dec_results[i].snr,
-               dec_results[i].dt,
-               dec_results[i].freq,
-               (int)dec_results[i].drift,
-               dec_results[i].call,
-               dec_results[i].loc,
-               dec_results[i].pwr);
-
-        curl = curl_easy_init();
-        if (curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, url);
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-            res = curl_easy_perform(curl);
-
-            if (res != CURLE_OK)
-                fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-
-            curl_easy_cleanup(curl);
-        }
-    }
-
-    if (n_results == 0) {
-        printf("No spot %04d-%02d-%02d %02d:%02dz\n",
-               gtm->tm_year + 1900,
-               gtm->tm_mon + 1,
-               gtm->tm_mday,
-               gtm->tm_hour,
-               gtm->tm_min);
-    }
+    // TODO
 }
 
 
@@ -761,7 +704,7 @@ int main(int argc, char **argv) {
     time(&rawtime);
     struct tm *gtm = gmtime(&rawtime);
 
-    printf("\nStarting rtlsdr-wsprd (%04d-%02d-%02d, %02d:%02dz) -- Version 0.3\n",
+    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.1alpha\n",
            gtm->tm_year + 1900, gtm->tm_mon + 1, gtm->tm_mday, gtm->tm_hour, gtm->tm_min);
     printf("  Callsign     : %s\n", dec_options.rcall);
     printf("  Locator      : %s\n", dec_options.rloc);
@@ -803,9 +746,9 @@ int main(int argc, char **argv) {
     while (!rx_state.exit_flag && !(rx_options.maxloop && (nLoop >= rx_options.maxloop))) {
         /* Wait for time Sync on 2 mins */
         gettimeofday(&lTime, NULL);
-        sec = lTime.tv_sec % 120;
+        sec = lTime.tv_sec % 15;
         usec = sec * 1000000 + lTime.tv_usec;
-        uwait = 120000000 - usec + 10000;  // Adding 10ms, to be sure to reach this next minute
+        uwait = 15000000 - usec + 10000;  // Adding 10ms, to be sure to reach this next minute
         usleep(uwait);
 
         /* Use the Store the date at the begin of the frame */
@@ -863,10 +806,27 @@ float hann_i(int i, int N) {
     return x * x;
 }
 
+void ft8_subsystem(float *idat,
+                   float *qdat,
+                   uint32_t npoints,
+                   struct decoder_options options,
+                   struct decoder_results *decodes,
+                   int32_t *n_results) {
 
-/* Compute FFT magnitudes (log power) for each timeslot in the signal */
-void extract_power(float *idat, float *qdat, uint8_t *mag_power) {
+    fprintf(stderr, "SIGNAL_SAMPLE_RATE = %d\n", SIGNAL_SAMPLE_RATE);
+    fprintf(stderr, "SIGNAL_NUM_SAMPLES = %d\n", SIGNAL_NUM_SAMPLES);
+    fprintf(stderr, "DOWNSAMPLING = %d\n", DOWNSAMPLING);
+    fprintf(stderr, "NUM_BIN = %d\n", NUM_BIN);
+    fprintf(stderr, "BLOCK_SIZE = %d\n", BLOCK_SIZE);
+    fprintf(stderr, "SUB_BLOCK_SIZE = %d\n", SUB_BLOCK_SIZE);
+    fprintf(stderr, "NFFT = %d\n", NFFT);
+    fprintf(stderr, "NUM_BLOCKS = %d\n", NUM_BLOCKS);
+    fprintf(stderr, "MAG_ARRAY = %d\n", MAG_ARRAY);
 
+    assert(npoints == SIGNAL_NUM_SAMPLES);
+
+    /* Compute FFT over the whole signal and store it */
+    uint8_t mag_power[MAG_ARRAY];
     const int len_window = 1.8f * BLOCK_SIZE;  // hand-picked and optimized
 
     float window[NFFT];
@@ -926,30 +886,9 @@ void extract_power(float *idat, float *qdat, uint8_t *mag_power) {
     }
     fprintf(stderr, "Max magnitude: %.1f dB\n", max_mag);
     free(fft_work);
-}
 
-
-void ft8_subsystem(float *idat,
-                   float *qdat,
-                   uint32_t npoints,
-                   struct decoder_options options,
-                   struct decoder_results *decodes,
-                   int32_t *n_results) {
-
-    fprintf(stderr, "SIGNAL_SAMPLE_RATE = %d\n", SIGNAL_SAMPLE_RATE);
-    fprintf(stderr, "SIGNAL_NUM_SAMPLES = %d\n", SIGNAL_NUM_SAMPLES);
-    fprintf(stderr, "DOWNSAMPLING = %d\n", DOWNSAMPLING);
-    fprintf(stderr, "NUM_BIN = %d\n", NUM_BIN);
-    fprintf(stderr, "BLOCK_SIZE = %d\n", BLOCK_SIZE);
-    fprintf(stderr, "SUB_BLOCK_SIZE = %d\n", SUB_BLOCK_SIZE);
-    fprintf(stderr, "NFFT = %d\n", NFFT);
-    fprintf(stderr, "NUM_BLOCKS = %d\n", NUM_BLOCKS);
-    fprintf(stderr, "MAG_ARRAY = %d\n", MAG_ARRAY);
-
-    assert(npoints == SIGNAL_NUM_SAMPLES);
-
-    // Compute FFT over the whole signal and store it
-    uint8_t mag_power[MAG_ARRAY];
+    /* Find top candidates by Costas sync score and localize them in time and frequency */
+    candidate_t candidate_list[K_MAX_CANDIDATES];
     waterfall_t power = {
         .num_blocks = NUM_BLOCKS,
         .num_bins = NUM_BIN,
@@ -957,10 +896,6 @@ void ft8_subsystem(float *idat,
         .freq_osr = K_FREQ_OSR,
         .mag = mag_power
     };
-    extract_power(idat, qdat, mag_power);
-
-    // Find top candidates by Costas sync score and localize them in time and frequency
-    candidate_t candidate_list[K_MAX_CANDIDATES];
     int num_candidates = ft8_find_sync(&power, K_MAX_CANDIDATES, candidate_list, K_MIN_SCORE);
 
     // Hash table for decoded messages (to check for duplicates)
