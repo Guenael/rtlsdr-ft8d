@@ -58,27 +58,29 @@
 #include "kiss_fft/kiss_fft.h"
 
 
-#define SIGNAL_LENGHT       15
-#define SIGNAL_SAMPLE_RATE  12000                                 // UPDATE to 4000 or 3000 (iq = 3kHz BW)
-#define SAMPLING_RATE       2400000
-#define FS4_RATE            (SAMPLING_RATE / 4)                   // = 600 kHz
-#define DOWNSAMPLING        (SAMPLING_RATE / SIGNAL_SAMPLE_RATE)  // = 200
-#define DEFAULT_BUF_LENGTH  (4 * 16384)                           // = 65536
+// uint32_t = RPi targeted hw/os, not sure if hardcoding this is a good practice
+#define SIGNAL_LENGHT       (uint32_t)15
+#define SIGNAL_SAMPLE_RATE  (uint32_t)12000                                 // UPDATE to 4000 or 3000 (iq = 3kHz BW)
+#define SIGNAL_NUM_SAMPLES  (uint32_t)SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE
+#define SAMPLING_RATE       (uint32_t)2400000
+#define FS4_RATE            (uint32_t)(SAMPLING_RATE / 4)                   // = 600 kHz
+#define DOWNSAMPLING        (uint32_t)(SAMPLING_RATE / SIGNAL_SAMPLE_RATE)  // = 200
+#define DEFAULT_BUF_LENGTH  (uint32_t)(4 * 16384)                           // = 65536
 
-#define K_MIN_SCORE         10                                    // Minimum sync score threshold for candidates
-#define K_MAX_CANDIDATES    120
-#define K_LDPC_ITERS        20
-#define K_MAX_MESSAGES      50
-#define K_FREQ_OSR          2
-#define K_TIME_OSR          2
-#define K_FSK_DEV           6.25
+#define K_MIN_SCORE         (uint32_t)10                                    // Minimum sync score threshold for candidates
+#define K_MAX_CANDIDATES    (uint32_t)120
+#define K_LDPC_ITERS        (uint32_t)20
+#define K_MAX_MESSAGES      (uint32_t)50
+#define K_FREQ_OSR          (uint32_t)2
+#define K_TIME_OSR          (uint32_t)2
+#define K_FSK_DEV           (uint32_t)6.25
 
-#define NUM_BIN             (unsigned int)(SIGNAL_SAMPLE_RATE / (2 * K_FSK_DEV))
-#define BLOCK_SIZE          (unsigned int)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)
-#define SUB_BLOCK_SIZE      (unsigned int)(BLOCK_SIZE / K_TIME_OSR)
-#define NFFT                (unsigned int)(BLOCK_SIZE * K_FREQ_OSR)
-#define NUM_BLOCKS          (unsigned int)((SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE)
-#define MAG_ARRAY           (unsigned int)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN)
+#define NUM_BIN             (uint32_t)(SIGNAL_SAMPLE_RATE / (2 * K_FSK_DEV))
+#define BLOCK_SIZE          (uint32_t)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)
+#define SUB_BLOCK_SIZE      (uint32_t)(BLOCK_SIZE / K_TIME_OSR)
+#define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)
+#define NUM_BLOCKS          (uint32_t)((SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE)
+#define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN)
 
 
 /* Global declaration for these structs */
@@ -859,25 +861,16 @@ float hann_i(int i, int N) {
 // Compute FFT magnitudes (log power) for each timeslot in the signal
 void extract_power(float *idat, float *qdat, uint8_t *mag_power) {
 
-    const float fft_norm = 2.0f / NFFT;
     const int len_window = 1.8f * BLOCK_SIZE;  // hand-picked and optimized
 
     float window[NFFT];
     for (int i = 0; i < NFFT; ++i) {
-        // window[i] = 1;
-        // window[i] = hann_i(i, NFFT);
-        // window[i] = blackman_i(i, NFFT);
-        // window[i] = hamming_i(i, NFFT);
         window[i] = (i < len_window) ? hann_i(i, len_window) : 0;
     }
 
     size_t fft_work_size;
     kiss_fft_alloc(NFFT, 0, 0, &fft_work_size);
-
-    fprintf(stderr, "Block size = %d\n", BLOCK_SIZE);
-    fprintf(stderr, "Subblock size = %d\n", SUB_BLOCK_SIZE);
-    fprintf(stderr, "N_FFT = %d\n", NFFT);
-    fprintf(stderr, "FFT work area = %lu\n", fft_work_size);
+    fprintf(stderr, "FFT work size = %lu\n", fft_work_size);
 
     void *fft_work = malloc(fft_work_size);
     kiss_fft_cfg fft_cfg = kiss_fft_alloc(NFFT, 0, fft_work, &fft_work_size);
@@ -903,7 +896,9 @@ void extract_power(float *idat, float *qdat, uint8_t *mag_power) {
             // Compute log magnitude in decibels
             for (int idx_bin = 0; idx_bin < NFFT; ++idx_bin) {
                 float mag2 = (cx_out[idx_bin].i * cx_out[idx_bin].i) + (cx_out[idx_bin].r * cx_out[idx_bin].r);
-                mag_db[idx_bin] = 10.0f * log10f(1E-12f + mag2 * fft_norm * fft_norm);
+                mag_db[idx_bin] = 10.0f * log10f(1E-12f + mag2 * 4.0f / (NFFT * NFFT));
+                // const float fft_norm = 2.0f / NFFT;
+                // fft_norm^2 = 4.0f / (NFFT * NFFT);
             }
 
             // Loop over two possible frequency bin offsets (for averaging)
@@ -934,12 +929,18 @@ void ft8_subsystem(float *idat,
                    struct decoder_options options,
                    struct decoder_results *decodes,
                    int32_t *n_results) {
-    // Inputs
-    int sample_rate = SIGNAL_SAMPLE_RATE;
-    int num_samples = SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE;
-    assert(num_samples == npoints);
 
-    fprintf(stderr, "Sample rate %d Hz, %d blocks, %d bins\n", sample_rate, NUM_BLOCKS, NUM_BIN);
+    fprintf(stderr, "SIGNAL_SAMPLE_RATE = %d\n", SIGNAL_SAMPLE_RATE);
+    fprintf(stderr, "SIGNAL_NUM_SAMPLES = %d\n", SIGNAL_NUM_SAMPLES);
+    fprintf(stderr, "DOWNSAMPLING = %d\n", DOWNSAMPLING);
+    fprintf(stderr, "NUM_BIN = %d\n", NUM_BIN);
+    fprintf(stderr, "BLOCK_SIZE = %d\n", BLOCK_SIZE);
+    fprintf(stderr, "SUB_BLOCK_SIZE = %d\n", SUB_BLOCK_SIZE);
+    fprintf(stderr, "NFFT = %d\n", NFFT);
+    fprintf(stderr, "NUM_BLOCKS = %d\n", NUM_BLOCKS);
+    fprintf(stderr, "MAG_ARRAY = %d\n", MAG_ARRAY);
+
+    assert(npoints == SIGNAL_NUM_SAMPLES);
 
     // Compute FFT over the whole signal and store it
     uint8_t mag_power[MAG_ARRAY];
