@@ -1,18 +1,18 @@
 /*
  * MIT License
- * 
+ *
  * Copyright (c) 2018 Kārlis Goba
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,7 +20,7 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- * 
+ *
  */
 
 #include "constants.h"
@@ -37,16 +37,16 @@ const uint8_t kFT8_Gray_map[8] = {0, 1, 3, 2, 5, 6, 4, 7};
 const uint8_t kFT4_Gray_map[4] = {0, 1, 3, 2};
 
 const uint8_t kFT4_XOR_sequence[10] = {
-    0x4Au, // 01001010
-    0x5Eu, // 01011110
-    0x89u, // 10001001
-    0xB4u, // 10110100
-    0xB0u, // 10110000
-    0x8Au, // 10001010
-    0x79u, // 01111001
-    0x55u, // 01010101
-    0xBEu, // 10111110
-    0x28u, // 00101 [000]
+    0x4Au,  // 01001010
+    0x5Eu,  // 01011110
+    0x89u,  // 10001001
+    0xB4u,  // 10110100
+    0xB0u,  // 10110000
+    0x8Au,  // 10001010
+    0x79u,  // 01111001
+    0x55u,  // 01010101
+    0xBEu,  // 10111110
+    0x28u,  // 00101 [000]
 };
 
 // Parity generator matrix for (174,91) LDPC code, stored in bitpacked format (MSB first)

@@ -34,4 +34,4 @@ void int_to_dd(char* str, int value, int width, bool full_sign);
 char charn(int c, int table_idx);
 int nchar(char c, int table_idx);
 
-#endif // _INCLUDE_TEXT_H_
+#endif  // _INCLUDE_TEXT_H_

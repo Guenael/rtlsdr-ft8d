@@ -1,18 +1,18 @@
 /*
  * MIT License
- * 
+ *
  * Copyright (c) 2018 Kārlis Goba
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,7 +20,7 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- * 
+ *
  */
 
 #ifndef _INCLUDE_CONSTANTS_H_
@@ -29,26 +29,26 @@
 #include <stdint.h>
 
 // Define FT8 symbol counts
-#define FT8_ND (58) ///< Data symbols
-#define FT8_NS (21) ///< Sync symbols (3 @ Costas 7x7)
-#define FT8_NN (79) ///< Total channel symbols (FT8_NS + FT8_ND)
+#define FT8_ND (58)  ///< Data symbols
+#define FT8_NS (21)  ///< Sync symbols (3 @ Costas 7x7)
+#define FT8_NN (79)  ///< Total channel symbols (FT8_NS + FT8_ND)
 
 // Define FT4 symbol counts
-#define FT4_ND (87) ///< Data symbols
-#define FT4_NS (16) ///< Sync symbols (3 @ Costas 7x7)
-#define FT4_NR (2) ///< Ramp symbols (beginning + end)
-#define FT4_NN (105) ///< Total channel symbols (FT4_NS + FT4_ND + FT4_NR)
+#define FT4_ND (87)   ///< Data symbols
+#define FT4_NS (16)   ///< Sync symbols (3 @ Costas 7x7)
+#define FT4_NR (2)    ///< Ramp symbols (beginning + end)
+#define FT4_NN (105)  ///< Total channel symbols (FT4_NS + FT4_ND + FT4_NR)
 
 // Define LDPC parameters
-#define FT8_LDPC_N       (174) ///< Number of bits in the encoded message (payload with LDPC checksum bits)
-#define FT8_LDPC_K       (91) ///< Number of payload bits (including CRC)
-#define FT8_LDPC_M       (83) ///< Number of LDPC checksum bits (FT8_LDPC_N - FT8_LDPC_K)
-#define FT8_LDPC_N_BYTES ((FT8_LDPC_N + 7) / 8) ///< Number of whole bytes needed to store 174 bits (full message)
-#define FT8_LDPC_K_BYTES ((FT8_LDPC_K + 7) / 8) ///< Number of whole bytes needed to store 91 bits (payload + CRC only)
+#define FT8_LDPC_N (174)                         ///< Number of bits in the encoded message (payload with LDPC checksum bits)
+#define FT8_LDPC_K (91)                          ///< Number of payload bits (including CRC)
+#define FT8_LDPC_M (83)                          ///< Number of LDPC checksum bits (FT8_LDPC_N - FT8_LDPC_K)
+#define FT8_LDPC_N_BYTES ((FT8_LDPC_N + 7) / 8)  ///< Number of whole bytes needed to store 174 bits (full message)
+#define FT8_LDPC_K_BYTES ((FT8_LDPC_K + 7) / 8)  ///< Number of whole bytes needed to store 91 bits (payload + CRC only)
 
 // Define CRC parameters
-#define FT8_CRC_POLYNOMIAL ((uint16_t)0x2757u) ///< CRC-14 polynomial without the leading (MSB) 1
-#define FT8_CRC_WIDTH      (14)
+#define FT8_CRC_POLYNOMIAL ((uint16_t)0x2757u)  ///< CRC-14 polynomial without the leading (MSB) 1
+#define FT8_CRC_WIDTH (14)
 
 /// Costas 7x7 tone pattern for synchronization
 extern const uint8_t kFT8_Costas_pattern[7];
@@ -82,4 +82,4 @@ extern const uint8_t kFT8_LDPC_Mn[FT8_LDPC_N][3];
 /// Number of rows (columns in C/C++) in the array Nm.
 extern const uint8_t kFT8_LDPC_num_rows[FT8_LDPC_M];
 
-#endif // _INCLUDE_CONSTANTS_H_
+#endif  // _INCLUDE_CONSTANTS_H_

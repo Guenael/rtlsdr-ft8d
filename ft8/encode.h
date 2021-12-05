@@ -29,4 +29,4 @@ void ft8_encode(const uint8_t* payload, uint8_t* tones);
 /// @param[out] tones  - array of FT4_NN (105) bytes to store the generated tones (encoded as 0..3)
 void ft4_encode(const uint8_t* payload, uint8_t* tones);
 
-#endif // _INCLUDE_ENCODE_H_
+#endif  // _INCLUDE_ENCODE_H_
