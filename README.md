@@ -17,6 +17,7 @@ To install and use your dongle on a Raspberry Pi with a Rasberian OS:
 ```bash
 sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
 git clone https://github.com/Guenael/rtlsdr-ft8d
+git submodule update --init --recursive
 cd rtlsdr-ft8d
 make
 make install
@@ -40,21 +41,22 @@ This application written in C does:
 
   1. Install a Linux compatible distro on your device (ex. Raspbian for RaspberryPi)
   1. Install dependencies & useful tools (for example, NTP for time synchronization). Example with a Debian based like Raspbian:
-     ```
+     ```bash
      sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
      ```
   1. Clone this repository:
-     ```
+     ```bash
      git clone https://github.com/Guenael/rtlsdr-ft8d
+     git submodule update --init --recursive
      ```
   1. Build the application:
-     ```
+     ```bash
      cd rtlsdr-ft8d
      make
      make install
      ```
   1. Start the application with your right paramaters, ex. for the 2m band, with a fake callsign (A1XYZ):
-     ```
+     ```bash
      rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29
      ```
 

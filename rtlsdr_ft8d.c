@@ -55,7 +55,7 @@
 #include "ft8_lib/ft8/encode.h"
 #include "ft8_lib/ft8/crc.h"
 
-#include "kiss_fft/kiss_fft.h"
+#include "kissfft/kiss_fft.h"
 
 
 // uint32_t = RPi targeted hw/os, not sure if hardcoding this is a good practice
