@@ -11,4 +11,4 @@ void ldpc_decode(float codeword[], int max_iters, uint8_t plain[], int* ok);
 
 void bp_decode(float codeword[], int max_iters, uint8_t plain[], int* ok);
 
-#endif // _INCLUDE_LDPC_H_
+#endif  // _INCLUDE_LDPC_H_

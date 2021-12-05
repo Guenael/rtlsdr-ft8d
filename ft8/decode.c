@@ -1,18 +1,18 @@
 /*
  * MIT License
- * 
+ *
  * Copyright (c) 2018 Kārlis Goba
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,7 +20,7 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- * 
+ *
  */
 
 #include "decode.h"
@@ -53,35 +53,27 @@ static void heapify_up(candidate_t heap[], int heap_size);
 static void decode_symbol(const uint8_t* power, int bit_idx, float* log174);
 static void decode_multi_symbols(const uint8_t* power, int num_bins, int n_syms, int bit_idx, float* log174);
 
-static int get_index(const waterfall_t* power, int block, int time_sub, int freq_sub, int bin)
-{
+static int get_index(const waterfall_t* power, int block, int time_sub, int freq_sub, int bin) {
     return ((((block * power->time_osr) + time_sub) * power->freq_osr + freq_sub) * power->num_bins) + bin;
 }
 
-int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap[], int min_score)
-{
+int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap[], int min_score) {
     int heap_size = 0;
     int sym_stride = power->time_osr * power->freq_osr * power->num_bins;
 
     // Here we allow time offsets that exceed signal boundaries, as long as we still have all data bits.
     // I.e. we can afford to skip the first 7 or the last 7 Costas symbols, as long as we track how many
     // sync symbols we included in the score, so the score is averaged.
-    for (int time_sub = 0; time_sub < power->time_osr; ++time_sub)
-    {
-        for (int freq_sub = 0; freq_sub < power->freq_osr; ++freq_sub)
-        {
-            for (int time_offset = -12; time_offset < 24; ++time_offset)
-            {
-                for (int freq_offset = 0; freq_offset + 7 < power->num_bins; ++freq_offset)
-                {
+    for (int time_sub = 0; time_sub < power->time_osr; ++time_sub) {
+        for (int freq_sub = 0; freq_sub < power->freq_osr; ++freq_sub) {
+            for (int time_offset = -12; time_offset < 24; ++time_offset) {
+                for (int freq_offset = 0; freq_offset + 7 < power->num_bins; ++freq_offset) {
                     int score = 0;
                     int num_average = 0;
 
                     // Compute average score over sync symbols (m+k = 0-7, 36-43, 72-79)
-                    for (int m = 0; m <= 72; m += 36)
-                    {
-                        for (int k = 0; k < 7; ++k)
-                        {
+                    for (int m = 0; m <= 72; m += 36) {
+                        for (int k = 0; k < 7; ++k) {
                             int block = time_offset + m + k;
                             // Check for time boundaries
                             if (block < 0)
@@ -100,27 +92,23 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
                             // ++num_average;
 
                             // Check only the neighbors of the expected symbol frequency- and time-wise
-                            int sm = kFT8_Costas_pattern[k]; // Index of the expected bin
-                            if (sm > 0)
-                            {
+                            int sm = kFT8_Costas_pattern[k];  // Index of the expected bin
+                            if (sm > 0) {
                                 // look at one frequency bin lower
                                 score += p8[sm] - p8[sm - 1];
                                 ++num_average;
                             }
-                            if (sm < 7)
-                            {
+                            if (sm < 7) {
                                 // look at one frequency bin higher
                                 score += p8[sm] - p8[sm + 1];
                                 ++num_average;
                             }
-                            if ((k > 0) && (block > 0))
-                            {
+                            if ((k > 0) && (block > 0)) {
                                 // look one symbol back in time
                                 score += p8[sm] - p8[sm - sym_stride];
                                 ++num_average;
                             }
-                            if ((k < 6) && ((block + 1) < power->num_blocks))
-                            {
+                            if ((k < 6) && ((block + 1) < power->num_blocks)) {
                                 // look one symbol forward in time
                                 score += p8[sm] - p8[sm + sym_stride];
                                 ++num_average;
@@ -136,8 +124,7 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
 
                     // If the heap is full AND the current candidate is better than
                     // the worst in the heap, we remove the worst and make space
-                    if (heap_size == num_candidates && score > heap[0].score)
-                    {
+                    if (heap_size == num_candidates && score > heap[0].score) {
                         heap[0] = heap[heap_size - 1];
                         --heap_size;
 
@@ -145,8 +132,7 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
                     }
 
                     // If there's free space in the heap, we add the current candidate
-                    if (heap_size < num_candidates)
-                    {
+                    if (heap_size < num_candidates) {
                         heap[heap_size].score = score;
                         heap[heap_size].time_offset = time_offset;
                         heap[heap_size].freq_offset = freq_offset;
@@ -163,8 +149,7 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
 
     // Sort the candidates by sync strength - here we benefit from the heap structure
     int len_unsorted = heap_size;
-    while (len_unsorted > 1)
-    {
+    while (len_unsorted > 1) {
         candidate_t tmp = heap[len_unsorted - 1];
         heap[len_unsorted - 1] = heap[0];
         heap[0] = tmp;
@@ -175,8 +160,7 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
     return heap_size;
 }
 
-void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* cand, float* log174)
-{
+void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* cand, float* log174) {
     int sym_stride = power->time_osr * power->freq_osr * power->num_bins;
     int offset = get_index(power, cand->time_offset, cand->time_sub, cand->freq_sub, cand->freq_offset);
 
@@ -184,8 +168,7 @@ void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* cand, f
     const int n_syms = 1;
     const int n_bits = 3 * n_syms;
     const int n_tones = (1 << n_bits);
-    for (int k = 0; k < FT8_ND; k += n_syms)
-    {
+    for (int k = 0; k < FT8_ND; k += n_syms) {
         // Add either 7 or 14 extra symbols to account for sync
         int sym_idx = (k < FT8_ND / 2) ? (k + 7) : (k + 14);
         int bit_idx = 3 * k;
@@ -193,12 +176,9 @@ void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* cand, f
         int block = cand->time_offset + sym_idx;
 
         // Check for time boundaries
-        if ((block < 0) || (block >= power->num_blocks))
-        {
+        if ((block < 0) || (block >= power->num_blocks)) {
             log174[bit_idx] = 0;
-        }
-        else
-        {
+        } else {
             // Pointer to 8 bins of the current symbol
             const uint8_t* ps = power->mag + offset + (sym_idx * sym_stride);
 
@@ -209,8 +189,7 @@ void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* cand, f
     // Compute the variance of log174
     float sum = 0;
     float sum2 = 0;
-    for (int i = 0; i < FT8_LDPC_N; ++i)
-    {
+    for (int i = 0; i < FT8_LDPC_N; ++i) {
         sum += log174[i];
         sum2 += log174[i] * log174[i];
     }
@@ -219,23 +198,20 @@ void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* cand, f
 
     // Normalize log174 distribution and scale it with experimentally found coefficient
     float norm_factor = sqrtf(24.0f / variance);
-    for (int i = 0; i < FT8_LDPC_N; ++i)
-    {
+    for (int i = 0; i < FT8_LDPC_N; ++i) {
         log174[i] *= norm_factor;
     }
 }
 
-bool ft8_decode(const waterfall_t* power, const candidate_t* cand, message_t* message, int max_iterations, decode_status_t* status)
-{
-    float log174[FT8_LDPC_N]; // message bits encoded as likelihood
+bool ft8_decode(const waterfall_t* power, const candidate_t* cand, message_t* message, int max_iterations, decode_status_t* status) {
+    float log174[FT8_LDPC_N];  // message bits encoded as likelihood
     ft8_extract_likelihood(power, cand, log174);
 
-    uint8_t plain174[FT8_LDPC_N]; // message bits (0/1)
+    uint8_t plain174[FT8_LDPC_N];  // message bits (0/1)
     bp_decode(log174, max_iterations, plain174, &status->ldpc_errors);
     // ldpc_decode(log174, max_iterations, plain174, &status->ldpc_errors);
 
-    if (status->ldpc_errors > 0)
-    {
+    if (status->ldpc_errors > 0) {
         return false;
     }
 
@@ -250,15 +226,13 @@ bool ft8_decode(const waterfall_t* power, const candidate_t* cand, message_t* me
     a91[10] &= 0x00;
     status->crc_calculated = ftx_compute_crc(a91, 96 - 14);
 
-    if (status->crc_extracted != status->crc_calculated)
-    {
+    if (status->crc_extracted != status->crc_calculated) {
         return false;
     }
 
     status->unpack_status = unpack77(a91, message->text);
 
-    if (status->unpack_status < 0)
-    {
+    if (status->unpack_status < 0) {
         return false;
     }
 
@@ -268,36 +242,29 @@ bool ft8_decode(const waterfall_t* power, const candidate_t* cand, message_t* me
     return true;
 }
 
-static float max2(float a, float b)
-{
+static float max2(float a, float b) {
     return (a >= b) ? a : b;
 }
 
-static float max4(float a, float b, float c, float d)
-{
+static float max4(float a, float b, float c, float d) {
     return max2(max2(a, b), max2(c, d));
 }
 
-static void heapify_down(candidate_t heap[], int heap_size)
-{
+static void heapify_down(candidate_t heap[], int heap_size) {
     // heapify from the root down
     int current = 0;
-    while (true)
-    {
+    while (true) {
         int largest = current;
         int left = 2 * current + 1;
         int right = left + 1;
 
-        if (left < heap_size && heap[left].score < heap[largest].score)
-        {
+        if (left < heap_size && heap[left].score < heap[largest].score) {
             largest = left;
         }
-        if (right < heap_size && heap[right].score < heap[largest].score)
-        {
+        if (right < heap_size && heap[right].score < heap[largest].score) {
             largest = right;
         }
-        if (largest == current)
-        {
+        if (largest == current) {
             break;
         }
 
@@ -308,15 +275,12 @@ static void heapify_down(candidate_t heap[], int heap_size)
     }
 }
 
-static void heapify_up(candidate_t heap[], int heap_size)
-{
+static void heapify_up(candidate_t heap[], int heap_size) {
     // heapify from the last node up
     int current = heap_size - 1;
-    while (current > 0)
-    {
+    while (current > 0) {
         int parent = (current - 1) / 2;
-        if (heap[current].score >= heap[parent].score)
-        {
+        if (heap[current].score >= heap[parent].score) {
             break;
         }
 
@@ -328,13 +292,11 @@ static void heapify_up(candidate_t heap[], int heap_size)
 }
 
 // Compute unnormalized log likelihood log(p(1) / p(0)) of 3 message bits (1 FSK symbol)
-static void decode_symbol(const uint8_t* power, int bit_idx, float* log174)
-{
+static void decode_symbol(const uint8_t* power, int bit_idx, float* log174) {
     // Cleaned up code for the simple case of n_syms==1
     float s2[8];
 
-    for (int j = 0; j < 8; ++j)
-    {
+    for (int j = 0; j < 8; ++j) {
         s2[j] = (float)power[kFT8_Gray_map[j]];
     }
 
@@ -344,24 +306,20 @@ static void decode_symbol(const uint8_t* power, int bit_idx, float* log174)
 }
 
 // Compute unnormalized log likelihood log(p(1) / p(0)) of bits corresponding to several FSK symbols at once
-static void decode_multi_symbols(const uint8_t* power, int num_bins, int n_syms, int bit_idx, float* log174)
-{
+static void decode_multi_symbols(const uint8_t* power, int num_bins, int n_syms, int bit_idx, float* log174) {
     const int n_bits = 3 * n_syms;
     const int n_tones = (1 << n_bits);
 
     float s2[n_tones];
 
-    for (int j = 0; j < n_tones; ++j)
-    {
+    for (int j = 0; j < n_tones; ++j) {
         int j1 = j & 0x07;
-        if (n_syms == 1)
-        {
+        if (n_syms == 1) {
             s2[j] = (float)power[kFT8_Gray_map[j1]];
             continue;
         }
         int j2 = (j >> 3) & 0x07;
-        if (n_syms == 2)
-        {
+        if (n_syms == 2) {
             s2[j] = (float)power[kFT8_Gray_map[j2]];
             s2[j] += (float)power[kFT8_Gray_map[j1] + 4 * num_bins];
             continue;
@@ -374,24 +332,18 @@ static void decode_multi_symbols(const uint8_t* power, int num_bins, int n_syms,
 
     // Extract bit significance (and convert them to float)
     // 8 FSK tones = 3 bits
-    for (int i = 0; i < n_bits; ++i)
-    {
-        if (bit_idx + i >= FT8_LDPC_N)
-        {
+    for (int i = 0; i < n_bits; ++i) {
+        if (bit_idx + i >= FT8_LDPC_N) {
             // Respect array size
             break;
         }
 
         uint16_t mask = (n_tones >> (i + 1));
         float max_zero = -1000, max_one = -1000;
-        for (int n = 0; n < n_tones; ++n)
-        {
-            if (n & mask)
-            {
+        for (int n = 0; n < n_tones; ++n) {
+            if (n & mask) {
                 max_one = max2(max_one, s2[n]);
-            }
-            else
-            {
+            } else {
                 max_zero = max2(max_zero, s2[n]);
             }
         }
@@ -402,25 +354,20 @@ static void decode_multi_symbols(const uint8_t* power, int num_bins, int n_syms,
 
 // Packs a string of bits each represented as a zero/non-zero byte in plain[],
 // as a string of packed bits starting from the MSB of the first byte of packed[]
-static void pack_bits(const uint8_t bit_array[], int num_bits, uint8_t packed[])
-{
+static void pack_bits(const uint8_t bit_array[], int num_bits, uint8_t packed[]) {
     int num_bytes = (num_bits + 7) / 8;
-    for (int i = 0; i < num_bytes; ++i)
-    {
+    for (int i = 0; i < num_bytes; ++i) {
         packed[i] = 0;
     }
 
     uint8_t mask = 0x80;
     int byte_idx = 0;
-    for (int i = 0; i < num_bits; ++i)
-    {
-        if (bit_array[i])
-        {
+    for (int i = 0; i < num_bits; ++i) {
+        if (bit_array[i]) {
             packed[byte_idx] |= mask;
         }
         mask >>= 1;
-        if (!mask)
-        {
+        if (!mask) {
             mask = 0x80;
             ++byte_idx;
         }

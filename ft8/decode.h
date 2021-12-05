@@ -1,18 +1,18 @@
 /*
  * MIT License
- * 
+ *
  * Copyright (c) 2018 Kārlis Goba
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,7 +20,7 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- * 
+ *
  */
 
 #ifndef _INCLUDE_DECODE_H_
@@ -37,30 +37,30 @@
 /// Values freq_osr > 1 mean the tone spacing is further subdivided by FFT analysis.
 typedef struct
 {
-    int num_blocks; ///< number of total blocks (symbols) in terms of 160 ms time periods
-    int num_bins; ///< number of FFT bins in terms of 6.25 Hz
-    int time_osr; ///< number of time subdivisions
-    int freq_osr; ///< number of frequency subdivisions
-    uint8_t* mag; ///< FFT magnitudes stored as uint8_t[blocks][time_osr][freq_osr][num_bins]
+    int num_blocks;  ///< number of total blocks (symbols) in terms of 160 ms time periods
+    int num_bins;    ///< number of FFT bins in terms of 6.25 Hz
+    int time_osr;    ///< number of time subdivisions
+    int freq_osr;    ///< number of frequency subdivisions
+    uint8_t* mag;    ///< FFT magnitudes stored as uint8_t[blocks][time_osr][freq_osr][num_bins]
 } waterfall_t;
 
 /// Output structure of ft8_find_sync() and input structure of ft8_decode().
 /// Holds the position of potential start of a message in time and frequency.
 typedef struct
 {
-    int16_t score; ///< Candidate score (non-negative number; higher score means higher likelihood)
-    int16_t time_offset; ///< Index of the time block
-    int16_t freq_offset; ///< Index of the frequency bin
-    uint8_t time_sub; ///< Index of the time subdivision used
-    uint8_t freq_sub; ///< Index of the frequency subdivision used
+    int16_t score;        ///< Candidate score (non-negative number; higher score means higher likelihood)
+    int16_t time_offset;  ///< Index of the time block
+    int16_t freq_offset;  ///< Index of the frequency bin
+    uint8_t time_sub;     ///< Index of the time subdivision used
+    uint8_t freq_sub;     ///< Index of the frequency subdivision used
 } candidate_t;
 
 /// Structure that holds the decoded message
 typedef struct
 {
     // TODO: check again that this size is enough
-    char text[25]; // plain text
-    uint16_t hash; // hash value to be used in hash table and quick checking for duplicates
+    char text[25];  // plain text
+    uint16_t hash;  // hash value to be used in hash table and quick checking for duplicates
 } message_t;
 
 /// Structure that contains the status of various steps during decoding of a message
@@ -91,4 +91,4 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
 /// @return True if the decoding was successful, false otherwise (check status for details)
 bool ft8_decode(const waterfall_t* power, const candidate_t* cand, message_t* message, int max_iterations, decode_status_t* status);
 
-#endif // _INCLUDE_DECODE_H_
+#endif  // _INCLUDE_DECODE_H_
