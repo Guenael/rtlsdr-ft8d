@@ -17,7 +17,7 @@ rtlsdr_ft8d: $(OBJS)
 	$(CC) -o $@ $^ $(LIBS)
 
 clean:
-	rm -f *.o ft8/*.o common/*.o fft/*.o $(TARGETS)
+	rm -f *.o ft8/*.o kiss_fft/*.o $(TARGETS)
 
 install:
 	install rtlsdr_ft8d /usr/local/bin/rtlsdr_ft8d
