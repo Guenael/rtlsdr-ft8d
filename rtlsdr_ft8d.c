@@ -48,12 +48,12 @@
 
 #include "./rtlsdr_ft8d.h"
 
-#include "ft8/unpack.h"
-#include "ft8/ldpc.h"
-#include "ft8/decode.h"
-#include "ft8/constants.h"
-#include "ft8/encode.h"
-#include "ft8/crc.h"
+#include "ft8_lib/ft8/unpack.h"
+#include "ft8_lib/ft8/ldpc.h"
+#include "ft8_lib/ft8/decode.h"
+#include "ft8_lib/ft8/constants.h"
+#include "ft8_lib/ft8/encode.h"
+#include "ft8_lib/ft8/crc.h"
 
 #include "kiss_fft/kiss_fft.h"
 
