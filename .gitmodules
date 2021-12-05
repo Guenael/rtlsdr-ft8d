@@ -1,3 +1,6 @@
 [submodule "ft8_lib"]
 	path = ft8_lib
 	url = git://github.com/kgoba/ft8_lib
+[submodule "kissfft"]
+	path = kissfft
+	url = git://github.com/mborgerding/kissfft
