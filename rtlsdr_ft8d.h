@@ -115,5 +115,4 @@ int32_t writefile(float *iSamples, float *qSamples, char *filename, uint32_t typ
 
 // Cleanup todo
 float hann_i(int i, int N);
-//void extract_power(float *idat, float *qdat,waterfall_t* power, int block_size);
 void ft8_subsystem(float *idat, float *qdat, uint32_t npoints, struct decoder_options options, struct decoder_results *decodes, int32_t *n_results);
