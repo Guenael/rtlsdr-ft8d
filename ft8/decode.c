@@ -41,7 +41,7 @@ static void ft8_extract_likelihood(const waterfall_t* power, const candidate_t* 
 
 /// Packs a string of bits each represented as a zero/non-zero byte in bit_array[],
 /// as a string of packed bits starting from the MSB of the first byte of packed[]
-/// @param[in] plain Array of bits (0 and nonzero values) with num_bits entires
+/// @param[in] plain Array of bits (0 and nonzero values) with num_bits entries
 /// @param[in] num_bits Number of bits (entries) passed in bit_array
 /// @param[out] packed Byte-packed bits representing the data in bit_array
 static void pack_bits(const uint8_t bit_array[], int num_bits, uint8_t packed[]);
