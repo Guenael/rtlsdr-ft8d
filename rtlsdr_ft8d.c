@@ -45,6 +45,7 @@
 #include <assert.h>
 #include <curl/curl.h>
 #include <rtl-sdr.h>
+#include <fftw3.h>
 
 #include "./rtlsdr_ft8d.h"
 
@@ -54,8 +55,6 @@
 #include "ft8_lib/ft8/constants.h"
 #include "ft8_lib/ft8/encode.h"
 #include "ft8_lib/ft8/crc.h"
-
-#include "kissfft/kiss_fft.h"
 
 
 #define SIGNAL_LENGHT       15
@@ -80,6 +79,15 @@
 #define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)                 // 1024
 #define NUM_BLOCKS          (uint32_t)((SIGNAL_NUM_SAMPLES - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE) // 92 vs 92.25 CHECK/FIXME
 #define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN)            // 94208 vs 94464 CHECK/FIXME
+
+/* Possible PATIENCE options for FFTW:
+ * - FFTW_ESTIMATE
+ * - FFTW_ESTIMATE_PATIENT
+ * - FFTW_MEASURE
+ * - FFTW_PATIENT
+ * - FFTW_EXHAUSTIVE
+ */
+#define PATIENCE FFTW_ESTIMATE
 
 
 /* Global declaration for these structs */
@@ -107,6 +115,14 @@ struct dongle_state {
     pthread_t thread;
 };
 struct dongle_state dongle;
+
+
+/* FFTW pointers & stuff */
+static fftwf_plan fft_plan;
+static fftwf_complex *fft_in, *fft_out;
+static FILE *fp_fftw_wisdom_file;
+static float *hann;
+// FIXME : implicitly static...
 
 
 /* Callback for each buffer received */
@@ -229,8 +245,9 @@ static void rtlsdr_callback(unsigned char *samples,
         if (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
             /* Lock the buffer during writing */
             pthread_rwlock_wrlock(&dec.rw);
-            rx_state.iSamples[rx_state.iqIndex] = Isum;
-            rx_state.qSamples[rx_state.iqIndex] = Qsum;
+            rx_state.iSamples[rx_state.iqIndex] = Isum / (4096.0 * DOWNSAMPLING);
+            rx_state.qSamples[rx_state.iqIndex] = Qsum / (4096.0 * DOWNSAMPLING);
+            // FIXME 4096 > (1/2^7)*32, signetd 8 bit sample + FIR correction
             pthread_rwlock_unlock(&dec.rw);
             rx_state.iqIndex++;
         } else {
@@ -283,6 +300,7 @@ static void *decoder(void *arg) {
         memcpy(iSamples, rx_state.iSamples, rx_state.iqIndex * sizeof(float));
         memcpy(qSamples, rx_state.qSamples, rx_state.iqIndex * sizeof(float));
         samples_len = rx_state.iqIndex;  // Overkill ?
+        assert(samples_len == SIGNAL_NUM_SAMPLES);
         pthread_rwlock_unlock(&dec.rw);
 
         /* Date and time will be updated/overload during the search & decoding process
@@ -292,7 +310,7 @@ static void *decoder(void *arg) {
         memcpy(dec_options.uttime, rx_options.uttime, sizeof(rx_options.uttime));
 
         /* Search & decode the signal */
-        ft8_subsystem(iSamples, qSamples, samples_len, dec_options, dec_results, &n_results);
+        ft8_subsystem(iSamples, qSamples, dec_results, &n_results);
         postSpots(n_results);
     }
     pthread_exit(NULL);
@@ -371,6 +389,42 @@ void initrx_options() {
     rx_options.directsampling = 0;
     rx_options.maxloop = 0;
     rx_options.device = 0;
+}
+
+
+void initFFTW() {
+    /* Recover existing FFTW optimisations */
+    if ((fp_fftw_wisdom_file = fopen("wspr_wisdom.dat", "r"))) {
+        fftwf_import_wisdom_from_file(fp_fftw_wisdom_file);
+        fclose(fp_fftw_wisdom_file);
+    }
+
+    /* Allocate FFT buffers */
+    fft_in  = (fftwf_complex *)fftwf_malloc(sizeof(fftwf_complex) * NFFT);
+    fft_out = (fftwf_complex *)fftwf_malloc(sizeof(fftwf_complex) * NFFT);
+
+    /* FFTW internal plan */
+    fft_plan = fftwf_plan_dft_1d(NFFT, fft_in, fft_out, FFTW_FORWARD, PATIENCE);
+
+    /* Calculate Hann function only one time
+     * https://en.wikipedia.org/wiki/Hann_function
+     */
+    hann = malloc(sizeof(float) * NFFT);
+    for (int i = 0; i < NFFT; i++) {
+        hann[i] = sinf((M_PI / NFFT) * i);
+    }
+}
+
+
+void freeFFTW() {
+  fftwf_free(fft_in);
+  fftwf_free(fft_out);
+
+  if ((fp_fftw_wisdom_file = fopen("wspr_wisdom.dat", "w"))) {
+      fftwf_export_wisdom_to_file(fp_fftw_wisdom_file);
+      fclose(fp_fftw_wisdom_file);
+  }
+  fftwf_destroy_plan(fft_plan);
 }
 
 
@@ -480,10 +534,6 @@ int main(int argc, char **argv) {
     char    rtl_vendor[256], rtl_product[256], rtl_serial[256];
 
     initrx_options();
-
-    /* RX buffer allocation */
-    rx_state.iSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
-    rx_state.qSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
 
     /* Stop condition setup */
     rx_state.exit_flag = false;
@@ -697,6 +747,13 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    /* FFTW init & allocation */
+    initFFTW();
+
+    /* RX buffer allocation */
+    rx_state.iSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
+    rx_state.qSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
+
     /* Print used parameter */
     time_t rawtime;
     time(&rawtime);
@@ -769,10 +826,7 @@ int main(int argc, char **argv) {
     /* Stop the RX and free the blocking function */
     rtlsdr_cancel_async(rtl_device);
 
-    /* Close the RTL device */
-    rtlsdr_close(rtl_device);
-
-    printf("Bye!\n");
+    // FIXME: TESTING the pthread wait before closing the device...
 
     /* Wait the thread join (send a signal before to terminate the job) */
     pthread_mutex_lock(&dec.ready_mutex);
@@ -787,6 +841,14 @@ int main(int argc, char **argv) {
     pthread_mutex_destroy(&dec.ready_mutex);
     pthread_exit(NULL);
 
+    /* Close the RTL device */
+    rtlsdr_close(rtl_device);
+
+    /* Free FFTW buffers */
+    freeFFTW();
+
+    printf("Bye!\n");
+
     return EXIT_SUCCESS;
 }
 
@@ -798,69 +860,33 @@ int main(int argc, char **argv) {
  * - http://www.sportscliche.com/wb2fko/WB2FKO_TAPR_revised.pdf
  */
 
-
-float hann_i(int i, int N) {
-    float x = sinf((float)M_PI * i / N);
-    return x * x;
-}
-
-void ft8_subsystem(float *idat,
-                   float *qdat,
-                   uint32_t npoints,
-                   struct decoder_options options,
+void ft8_subsystem(float *iSamples,
+                   float *qSamples,
                    struct decoder_results *decodes,
                    int32_t *n_results) {
 
-    fprintf(stderr, "SIGNAL_SAMPLE_RATE = %d\n", SIGNAL_SAMPLE_RATE);
-    fprintf(stderr, "SIGNAL_NUM_SAMPLES = %d\n", SIGNAL_NUM_SAMPLES);
-    fprintf(stderr, "DOWNSAMPLING = %d\n", DOWNSAMPLING);
-    fprintf(stderr, "NUM_BIN = %d\n", NUM_BIN);
-    fprintf(stderr, "BLOCK_SIZE = %d\n", BLOCK_SIZE);
-    fprintf(stderr, "SUB_BLOCK_SIZE = %d\n", SUB_BLOCK_SIZE);
-    fprintf(stderr, "NFFT = %d\n", NFFT);
-    fprintf(stderr, "NUM_BLOCKS = %d\n", NUM_BLOCKS);
-    fprintf(stderr, "MAG_ARRAY = %d\n", MAG_ARRAY);
-
-    assert(npoints == SIGNAL_NUM_SAMPLES);
-
     /* Compute FFT over the whole signal and store it */
     uint8_t mag_power[MAG_ARRAY];
-    const int len_window = 1.8f * BLOCK_SIZE;  // hand-picked and optimized
-
-    float window[NFFT];
-    for (int i = 0; i < NFFT; ++i) {
-        window[i] = (i < len_window) ? hann_i(i, len_window) : 0;
-    }
-
-    size_t fft_work_size;
-    kiss_fft_alloc(NFFT, 0, 0, &fft_work_size);
-    fprintf(stderr, "FFT work size = %lu\n", fft_work_size);
-
-    void *fft_work = malloc(fft_work_size);
-    kiss_fft_cfg fft_cfg = kiss_fft_alloc(NFFT, 0, fft_work, &fft_work_size);
 
     int offset = 0;
     float max_mag = -120.0f;
-    
+
     for (int idx_block = 0; idx_block < NUM_BLOCKS; ++idx_block) {
         // Loop over two possible time offsets (0 and BLOCK_SIZE/2)
         for (int time_sub = 0; time_sub < K_TIME_OSR; ++time_sub) {
-            kiss_fft_cpx cx_in[NFFT];
-            kiss_fft_cpx cx_out[NFFT];
             float mag_db[NFFT];
 
-            // Extract windowed signal block
-            for (int pos = 0; pos < NFFT; ++pos) {
-                cx_in[pos].r = window[pos] * idat[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + pos];
-                cx_in[pos].i = window[pos] * qdat[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + pos];
+            for (int i = 0; i < NFFT; ++i) {
+                fft_in[i][0] = iSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
+                fft_in[i][1] = qSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
             }
 
-            kiss_fft(fft_cfg, cx_in, cx_out);
+            fftwf_execute(fft_plan);
 
             // Compute log magnitude in decibels
-            for (int idx_bin = 0; idx_bin < NFFT; ++idx_bin) {
-                float mag2 = (cx_out[idx_bin].i * cx_out[idx_bin].i) + (cx_out[idx_bin].r * cx_out[idx_bin].r);
-                mag_db[idx_bin] = 10.0f * log10f(1E-12f + mag2 * 4.0f / (NFFT * NFFT));
+            for (int i = 0; i < NFFT; ++i) {
+                float mag2 = fft_out[i][0] * fft_out[i][0] + fft_out[i][1] * fft_out[i][1];
+                mag_db[i] = 10.0f * log10f(1E-12f + mag2 * 4.0f / (NFFT * NFFT));
                 // const float fft_norm = 2.0f / NFFT;
                 // fft_norm^2 = 4.0f / (NFFT * NFFT);
             }
@@ -883,7 +909,6 @@ void ft8_subsystem(float *idat,
         }
     }
     fprintf(stderr, "Max magnitude: %.1f dB\n", max_mag);
-    free(fft_work);
 
     /* Find top candidates by Costas sync score and localize them in time and frequency */
     candidate_t candidate_list[K_MAX_CANDIDATES];

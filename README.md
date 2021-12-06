@@ -15,7 +15,7 @@ This project aim at decoding FT8 signals using an RTL device, usually connected 
 To install and use your dongle on a Raspberry Pi with a Rasberian OS:
 
 ```bash
-sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
+sudo apt-get -y install build-essential clang libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
 git clone https://github.com/Guenael/rtlsdr-ft8d
 git submodule update --init --recursive
 cd rtlsdr-ft8d
@@ -42,7 +42,7 @@ This application written in C does:
   1. Install a Linux compatible distro on your device (ex. Raspbian for RaspberryPi)
   1. Install dependencies & useful tools (for example, NTP for time synchronization). Example with a Debian based like Raspbian:
      ```bash
-     sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
+     sudo apt-get -y install build-essential clang libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
      ```
   1. Clone this repository:
      ```bash
