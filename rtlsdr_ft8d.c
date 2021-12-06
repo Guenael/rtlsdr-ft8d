@@ -122,7 +122,7 @@ static fftwf_plan fft_plan;
 static fftwf_complex *fft_in, *fft_out;
 static FILE *fp_fftw_wisdom_file;
 static float *hann;
-// FIXME : implicitely static...
+// FIXME : implicitly static...
 
 
 /* Callback for each buffer received */
