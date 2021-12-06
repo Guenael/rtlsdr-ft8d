@@ -58,29 +58,28 @@
 #include "kissfft/kiss_fft.h"
 
 
-// uint32_t = RPi targeted hw/os, not sure if hardcoding this is a good practice
-#define SIGNAL_LENGHT       (uint32_t)15
-#define SIGNAL_SAMPLE_RATE  (uint32_t)12000                                    // UPDATE to 4000 or 3000 (iq = 3kHz BW)
-#define SIGNAL_NUM_SAMPLES  (uint32_t)SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE       // 180000
-#define SAMPLING_RATE       (uint32_t)2400000
-#define FS4_RATE            (uint32_t)(SAMPLING_RATE / 4)                      // = 600 kHz
-#define DOWNSAMPLING        (uint32_t)(SAMPLING_RATE / SIGNAL_SAMPLE_RATE)     // = 200
-#define DEFAULT_BUF_LENGTH  (uint32_t)(4 * 16384)                              // = 65536
+#define SIGNAL_LENGHT       15
+#define SIGNAL_SAMPLE_RATE  3200
+#define SIGNAL_NUM_SAMPLES  SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE                  // = 48_000 (IQ signal)
+#define SAMPLING_RATE       2400000
+#define FS4_RATE            (SAMPLING_RATE / 4)                                 // = 600_000
+#define DOWNSAMPLING        (SAMPLING_RATE / SIGNAL_SAMPLE_RATE)                // = 750
+#define DEFAULT_BUF_LENGTH  (4 * 16384)                                         // = 65_536
 
-#define K_MIN_SCORE         (uint32_t)10                                       // Minimum sync score threshold for candidates
-#define K_MAX_CANDIDATES    (uint32_t)120
-#define K_LDPC_ITERS        (uint32_t)20
-#define K_MAX_MESSAGES      (uint32_t)50
-#define K_FREQ_OSR          (uint32_t)2
-#define K_TIME_OSR          (uint32_t)2
-#define K_FSK_DEV           (uint32_t)6.25
+#define K_MIN_SCORE         10
+#define K_MAX_CANDIDATES    120
+#define K_LDPC_ITERS        20
+#define K_MAX_MESSAGES      50
+#define K_FREQ_OSR          2
+#define K_TIME_OSR          2
+#define K_FSK_DEV           6.25f
 
-#define NUM_BIN             (uint32_t)(SIGNAL_SAMPLE_RATE / (2 * K_FSK_DEV))   // 1000
-#define BLOCK_SIZE          (uint32_t)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)         // 2000
-#define SUB_BLOCK_SIZE      (uint32_t)(BLOCK_SIZE / K_TIME_OSR)                // 1000
-#define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)                // 4000
-#define NUM_BLOCKS          (uint32_t)((SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE) // 88
-#define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN) // 352000
+#define NUM_BIN             (uint32_t)(SIGNAL_SAMPLE_RATE / (2.0f * K_FSK_DEV)) // 256
+#define BLOCK_SIZE          (uint32_t)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)          // 512
+#define SUB_BLOCK_SIZE      (uint32_t)(BLOCK_SIZE / K_TIME_OSR)                 // 256
+#define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)                 // 1024
+#define NUM_BLOCKS          (uint32_t)((SIGNAL_NUM_SAMPLES - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE) // 92 vs 92.25 CHECK/FIXME
+#define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN)            // 94208 vs 94464 CHECK/FIXME
 
 
 /* Global declaration for these structs */
@@ -118,17 +117,16 @@ static void rtlsdr_callback(unsigned char *samples,
        Using : Octave/MATLAB code for generating compensation FIR coefficients
        URL : https://github.com/WestCoastDSP/CIC_Octave_Matlab
      */
-    // FIXME -- Update new coefs !!!
     const static float zCoef[33] = {
-        0.000358366, -0.003301180, -0.000609166, 0.006729260,
-        0.001403240, -0.014276600, -0.003107740, 0.027349800,
-        0.006522290, -0.048282000, -0.013725400, 0.082058900,
-        0.031488100, -0.142079000, -0.091377400, 0.271349000,
+        0.000358374, -0.003301220, -0.000609181, 0.006729330,
+        0.001403270, -0.014276800, -0.003107820, 0.027350100,
+        0.006522470, -0.048282500, -0.013725800, 0.082059600,
+        0.031488900, -0.142080000, -0.091379400, 0.271348000,
         0.500000000,
-        0.271349000, -0.091377400, -0.142079000, 0.031488100,
-        0.082058900, -0.013725400, -0.048282000, 0.006522290,
-        0.027349800, -0.003107740, -0.014276600, 0.001403240,
-        0.006729260, -0.000609166, -0.003301180, 0.000358366
+        0.271348000, -0.091379400, -0.142080000, 0.031488900,
+        0.082059600, -0.013725800, -0.048282500, 0.006522470,
+        0.027350100, -0.003107820, -0.014276800, 0.001403270,
+        0.006729330, -0.000609181, -0.003301220, 0.000358374,
     };
 
     int8_t *sigIn = (int8_t *)samples;
