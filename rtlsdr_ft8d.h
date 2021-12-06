@@ -108,11 +108,10 @@ int32_t parse_u64(char* s, uint64_t* const value);
 void initSampleStorage();
 void initDecoder_options();
 void initrx_options();
+void initFFTW();
+void freeFFTW();
 void sigint_callback_handler(int signum);
 void usage(void);
 int32_t readfile(float *iSamples, float *qSamples, char *filename);
 int32_t writefile(float *iSamples, float *qSamples, char *filename, uint32_t type, double freq);
-
-// Cleanup todo
-float hann_i(int i, int N);
-void ft8_subsystem(float *idat, float *qdat, uint32_t npoints, struct decoder_options options, struct decoder_results *decodes, int32_t *n_results);
+void ft8_subsystem(float *iSamples, float *qSamples, struct decoder_results *decodes, int32_t *n_results);
