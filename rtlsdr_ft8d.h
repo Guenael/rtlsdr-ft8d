@@ -77,25 +77,16 @@ struct decoder_options {
     char     rloc[7];      // Locator of the RX station
     char     date[7];      // Date & time of the processes samples
     char     uttime[5];    //  ''
-    uint32_t quickmode;    // Decoder option & tweak
-    uint32_t usehashtable; //  ''
-    uint32_t npasses;      //  ''
-    uint32_t subtraction;  //  ''
 };
 
 
 struct decoder_results {
-    double   freq;
-    float    sync;
-    float    snr;
-    float    dt;
-    float    drift;
-    int32_t  jitter;
-    char     message[23];
     char     call[13];
+    int32_t  freq;
+    int32_t  snr;
     char     loc[7];
-    char     pwr[3];
-    uint32_t cycles;
+    // tx_mode // static > FT8
+    // tx_info // static > \x00
 };
 
 
