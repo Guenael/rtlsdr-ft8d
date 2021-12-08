@@ -568,7 +568,7 @@ void usage(void) {
             "Use:\trtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
             "\t-f dial frequency [(,k,M) Hz] or band string\n"
             "\t   If band string is used, the default dial frequency will used.\n"
-            "\t   Bands: LF LF-15 MF MF-15 160m 160m-15 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
+            "\t   Bands: 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
             "\t   ('-15' suffix indicates the WSPR-15 region of band.)\n"
             "\t-c your callsign (12 chars max)\n"
             "\t-l your locator grid (6 chars max)\n"
