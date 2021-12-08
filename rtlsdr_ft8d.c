@@ -273,8 +273,66 @@ static void *rtlsdr_rx(void *arg) {
 }
 
 
+/* PSKreporter protocol documentation:
+ * https://pskreporter.info/pskdev.html
+ */
 void postSpots(uint32_t n_results) {
-    // TODO
+    // use struct decoder_options
+    // use struct decoder_results
+    // use snprintf
+
+    const unsigned char headerDescriptor[] = {
+        0x00, 0x0A,                                      // ID
+        0x00, 0x00, 0x00, 0x00,                          // Message Length (update)
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // CurrentDateTime (update)
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // Sequence Number (update)
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00   // Random number (update)
+    };
+
+    const unsigned char rxInfoDescriptor[] = {  // (RX = RTLsdr owner)
+        0x00, 0x03,                          // Options Template Set ID
+        0x00, 0x2C,                          // Length
+        0x50, 0xE2,                          // Link ID
+        0x00, 0x04,                          // Field Count
+        0x00, 0x00,                          // Scope Field Count
+        0x80, 0x02,                          // Receiver Callsign ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x80, 0x04,                          // Receiver Locator ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x80, 0x08,                          // Receiver Decoder Software ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x80, 0x09,                          // Receiver Antenna ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x00, 0x00                           // Padding
+    };
+
+    const unsigned char txInfoDescriptor[] = {  // (TX = Signal received)
+        0x00, 0x02,                          // Options Template Set ID
+        0x00, 0x3C,                          // Length
+        0x50, 0xE3,                          // Link ID
+        0x00, 0x07,                          // Field Count
+        0x80, 0x01,                          // Sender Callsign ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x80, 0x05,                          // Frequency ID
+        0x00, 0x04, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (4) length & enterprise number
+        0x80, 0x06,                          // SNR ID
+        0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
+        0x80, 0x0A,                          // Mode ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x80, 0x03,                          // Sender Locator ID
+        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+        0x80, 0x0B,                          // Information Source ID
+        0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
+        0x00, 0x96,                          // DateTimeSeconds ID
+        0x00, 0x04                           // Field Length
+    };
+
+    // FT4
+    // socket.sendto(packet, ("report.pskreporter.info", 4739))
+    // TX every 5 minutes
+
+    const unsigned char rxInfoData[] = "\x50\xE2+++"; // Malloc
+    const unsigned char txInfoData[] = "\x50\xE3+++"; // Malloc
 }
 
 
@@ -311,7 +369,9 @@ static void *decoder(void *arg) {
 
         /* Search & decode the signal */
         ft8_subsystem(iSamples, qSamples, dec_results, &n_results);
-        postSpots(n_results);
+
+        // DISABLED -- WIP
+        //postSpots(n_results);
     }
     pthread_exit(NULL);
 }
@@ -546,48 +606,38 @@ int main(int argc, char **argv) {
     while ((opt = getopt(argc, argv, "f:c:l:g:a:o:p:u:d:n:i:H:Q:S")) != -1) {
         switch (opt) {
             case 'f':  // Frequency
-                if (!strcasecmp(optarg, "LF")) {
-                    rx_options.dialfreq = 136000;
-                } else if (!strcasecmp(optarg, "LF-15")) {
-                    rx_options.dialfreq = 136112;
-                } else if (!strcasecmp(optarg, "MF")) {
-                    rx_options.dialfreq = 474200;
-                } else if (!strcasecmp(optarg, "MF-15")) {
-                    rx_options.dialfreq = 474312;
-                } else if (!strcasecmp(optarg, "160m")) {
-                    rx_options.dialfreq = 1836600;
-                } else if (!strcasecmp(optarg, "160m-15")) {
-                    rx_options.dialfreq = 1838212;
+                if (!strcasecmp(optarg, "160m")) {
+                    rx_options.dialfreq = 1840000;
                 } else if (!strcasecmp(optarg, "80m")) {
-                    rx_options.dialfreq = 3592600;
+                    rx_options.dialfreq = 3573000;
                 } else if (!strcasecmp(optarg, "60m")) {
-                    rx_options.dialfreq = 5287200;
+                    rx_options.dialfreq = 5357000;
                 } else if (!strcasecmp(optarg, "40m")) {
-                    rx_options.dialfreq = 7038600;
+                    rx_options.dialfreq = 7074000;
                 } else if (!strcasecmp(optarg, "30m")) {
-                    rx_options.dialfreq = 10138700;
+                    rx_options.dialfreq = 10136000;
                 } else if (!strcasecmp(optarg, "20m")) {
-                    rx_options.dialfreq = 14095600;
+                    rx_options.dialfreq = 14074000;
                 } else if (!strcasecmp(optarg, "17m")) {
-                    rx_options.dialfreq = 18104600;
+                    rx_options.dialfreq = 18100000;
                 } else if (!strcasecmp(optarg, "15m")) {
-                    rx_options.dialfreq = 21094600;
+                    rx_options.dialfreq = 21074000;
                 } else if (!strcasecmp(optarg, "12m")) {
-                    rx_options.dialfreq = 24924600;
+                    rx_options.dialfreq = 24915000;
                 } else if (!strcasecmp(optarg, "10m")) {
-                    rx_options.dialfreq = 28124600;
+                    rx_options.dialfreq = 28074000;
                 } else if (!strcasecmp(optarg, "6m")) {
-                    rx_options.dialfreq = 50293000;
+                    rx_options.dialfreq = 50313000;
                 } else if (!strcasecmp(optarg, "4m")) {
-                    rx_options.dialfreq = 70091000;
+                    rx_options.dialfreq = 70100000;
                 } else if (!strcasecmp(optarg, "2m")) {
-                    rx_options.dialfreq = 144489000;
+                    rx_options.dialfreq = 144174000;
                 } else if (!strcasecmp(optarg, "1m25")) {
-                    rx_options.dialfreq = 222280000;
+                    rx_options.dialfreq = 222065000;
                 } else if (!strcasecmp(optarg, "70cm")) {
-                    rx_options.dialfreq = 432300000;
+                    rx_options.dialfreq = 432065000;
                 } else if (!strcasecmp(optarg, "23cm")) {
-                    rx_options.dialfreq = 1296500000;
+                    rx_options.dialfreq = 1296174000;
                 } else {
                     rx_options.dialfreq = (uint32_t)atofs(optarg);
                 }
