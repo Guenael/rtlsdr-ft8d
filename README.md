@@ -17,8 +17,8 @@ To install and use your dongle on a Raspberry Pi with a Rasberian OS:
 ```bash
 sudo apt-get -y install build-essential clang libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev ntp
 git clone https://github.com/Guenael/rtlsdr-ft8d
-git submodule update --init --recursive
 cd rtlsdr-ft8d
+git submodule update --init --recursive
 make
 make install
 rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29
@@ -47,11 +47,11 @@ This application written in C does:
   1. Clone this repository:
      ```bash
      git clone https://github.com/Guenael/rtlsdr-ft8d
+     cd rtlsdr-ft8d
      git submodule update --init --recursive
      ```
   1. Build the application:
      ```bash
-     cd rtlsdr-ft8d
      make
      make install
      ```
