@@ -783,7 +783,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    rtl_result = rtlsdr_set_center_freq(rtl_device, rx_options.realfreq + FS4_RATE + 1500);
+    rtl_result = rtlsdr_set_center_freq(rtl_device, rx_options.realfreq + FS4_RATE);
     if (rtl_result < 0) {
         fprintf(stderr, "ERROR: Failed to set frequency\n");
         rtlsdr_close(rtl_device);
@@ -927,8 +927,8 @@ void ft8_subsystem(float *iSamples,
             float mag_db[NFFT];
 
             for (int i = 0; i < NFFT; ++i) {
-                fft_in[i][0] = iSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
-                fft_in[i][1] = qSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
+                fft_in[i][0] = qSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
+                fft_in[i][1] = iSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
             }
 
             fftwf_execute(fft_plan);
