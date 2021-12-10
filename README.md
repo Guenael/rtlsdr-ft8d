@@ -4,6 +4,7 @@
 
 ![rtlsdr-wsprd](art/rtlsdr-ft8d-web.jpg)
 
+![Project Status](https://img.shields.io/badge/project-broken-red)
 ![Workflow Status](https://img.shields.io/github/workflow/status/Guenael/rtlsdr-ft8d/CI)
 ![Last commit](https://img.shields.io/github/last-commit/Guenael/rtlsdr-ft8d)
 ![Commit activity](https://img.shields.io/github/commit-activity/m/Guenael/rtlsdr-ft8d)
