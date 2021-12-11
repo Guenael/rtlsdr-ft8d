@@ -1,6 +1,6 @@
 /*
  * FreeBSD License
- * Copyright (c) 2016, Guenael
+ * Copyright (c) 2016-2021, Guenael Jouchet (VA2GKA)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,6 @@
  *
  */
 
-
 #pragma once
 
 
@@ -37,6 +36,7 @@
 	#define true  1
 	#define false 0
 #endif
+
 
 
 struct receiver_state {
@@ -65,12 +65,16 @@ struct receiver_options {
     int32_t  directsampling;
     int32_t  maxloop;
     int32_t  device;
+    bool     selftest;
+    bool     writefile;
+    bool     readfile;
+    char     filename[33];
     char     date[7];
     char     uttime[5];
 };
 
 
-/* Option & config of decoder (Shared with the wsprd code) */
+/* Option & config of decoder */
 struct decoder_options {
     uint32_t freq;         // Dial frequency
     char     rcall[13];    // Callsign of the RX station
@@ -78,7 +82,6 @@ struct decoder_options {
     char     date[7];      // Date & time of the processes samples
     char     uttime[5];    //  ''
 };
-
 
 struct decoder_results {
     char     call[13];
@@ -93,16 +96,20 @@ struct decoder_results {
 static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void *ctx);
 static void *rtlsdr_rx(void *arg);
 void postSpots(uint32_t n_results);
+void printSpots();
+void saveSample(float *iSamples, float *qSamples);
 static void *decoder(void *arg);
 double atofs(char *s);
-int32_t parse_u64(char* s, uint64_t* const value);
+int32_t parse_u64(char *s, uint64_t *const value);
 void initSampleStorage();
-void initDecoder_options();
 void initrx_options();
 void initFFTW();
 void freeFFTW();
 void sigint_callback_handler(int signum);
+int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename);
+int32_t writeRawIQfile(float *iSamples, float *qSamples, char *filename);
+void decodeRecordedFile(char *filename);
+float whiteGaussianNoise(float factor);
+int32_t ft8DecoderSelfTest();
 void usage(void);
-int32_t readfile(float *iSamples, float *qSamples, char *filename);
-int32_t writefile(float *iSamples, float *qSamples, char *filename, uint32_t type, double freq);
-void ft8_subsystem(float *iSamples, float *qSamples, struct decoder_results *decodes, int32_t *n_results);
+void ft8_subsystem(float *iSamples, float *qSamples, uint32_t samples_len, struct decoder_results *decodes, int32_t *n_results);
