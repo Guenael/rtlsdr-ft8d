@@ -3,14 +3,10 @@
  * Copyright (c) 2016-2021, Guenael Jouchet (VA2GKA)
  * All rights reserved.
  *
- * This file is based on rtl-sdr project code and libraries:
- *   Github repository: https://github.com/osmocom/rtl-sdr
- *   Project web-page:  https://osmocom.org/projects/rtl-sdr/wiki
- *   Contributions:
- *     Copyright (C) 2012 by Steve Markgraf <steve{at}steve-m.de>
- *     Copyright (C) 2012 by Hoernchen <la{at}tfc-server.de>
- *     Copyright (C) 2012 by Kyle Keen <keenerd{at}gmail.com>
- *     Copyright (C) 2013 by Elias Oenal <EliasOenal{at}gmail.com>
+ * This file is based on rtlsdr-wsprd project:
+ *   https://github.com/Guenael/rtlsdr-wsprd
+ * FT8 decoder used is under MIT licence, located in this git sub-module:
+ *   https://github.com/kgoba/ft8_lib
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -43,20 +39,21 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <assert.h>
-#include <curl/curl.h>
 #include <rtl-sdr.h>
 #include <fftw3.h>
 
 #include "./rtlsdr_ft8d.h"
 
-#include "ft8_lib/ft8/unpack.h"
-#include "ft8_lib/ft8/ldpc.h"
-#include "ft8_lib/ft8/decode.h"
-#include "ft8_lib/ft8/constants.h"
-#include "ft8_lib/ft8/encode.h"
-#include "ft8_lib/ft8/crc.h"
+#include "./ft8_lib/ft8/constants.h"
+#include "./ft8_lib/ft8/pack.h"
+#include "./ft8_lib/ft8/unpack.h"
+#include "./ft8_lib/ft8/ldpc.h"
+#include "./ft8_lib/ft8/crc.h"
+#include "./ft8_lib/ft8/decode.h"
+#include "./ft8_lib/ft8/encode.h"
 
 
+/* Sampling definition for RTL devices & FT8 protocol */
 #define SIGNAL_LENGHT       15
 #define SIGNAL_SAMPLE_RATE  3200
 #define SIGNAL_NUM_SAMPLES  SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE                  // = 48_000 (IQ signal)
@@ -90,12 +87,12 @@
 #define PATIENCE FFTW_ESTIMATE
 
 
-/* Global declaration for these structs */
+/* Global declaration for states & options */
 struct receiver_state   rx_state;
 struct receiver_options rx_options;
 struct decoder_options  dec_options;
 struct decoder_results  dec_results[50];
-static rtlsdr_dev_t *rtl_device = NULL;
+static rtlsdr_dev_t     *rtl_device = NULL;
 
 
 /* Thread stuff for separate decoding */
@@ -107,7 +104,7 @@ struct decoder_state {
     pthread_cond_t   ready_cond;
     pthread_mutex_t  ready_mutex;
 };
-struct decoder_state dec;
+struct decoder_state dec_state;
 
 
 /* Thread stuff for separate RX (blocking function) */
@@ -122,13 +119,21 @@ static fftwf_plan fft_plan;
 static fftwf_complex *fft_in, *fft_out;
 static FILE *fp_fftw_wisdom_file;
 static float *hann;
-// FIXME : implicitly static...
 
 
 /* Callback for each buffer received */
-static void rtlsdr_callback(unsigned char *samples,
-                            uint32_t samples_count,
-                            void *ctx) {
+static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void *ctx) {
+    int8_t *sigIn = (int8_t *)samples;
+
+    /* CIC buffers/vars */
+    static int32_t  Ix1 = 0, Ix2 = 0,
+                    Qx1 = 0, Qx2 = 0;
+    static int32_t  Iy1 = 0, It1y = 0, It1z = 0,
+                    Qy1 = 0, Qt1y = 0, Qt1z = 0;
+    static int32_t  Iy2 = 0, It2y = 0, It2z = 0,
+                    Qy2 = 0, Qt2y = 0, Qt2z = 0;
+    static uint32_t decimationIndex = 0;
+
     /* FIR compensation filter coefs
        Using : Octave/MATLAB code for generating compensation FIR coefficients
        URL : https://github.com/WestCoastDSP/CIC_Octave_Matlab
@@ -145,24 +150,14 @@ static void rtlsdr_callback(unsigned char *samples,
         0.006729330, -0.000609181, -0.003301220, 0.000358374,
     };
 
-    int8_t *sigIn = (int8_t *)samples;
-    uint32_t sigLenght = samples_count;
-    static uint32_t decimationIndex = 0;
-
-    /* CIC buffers */
-    static int32_t Ix1, Ix2, Qx1, Qx2;
-    static int32_t Iy1, It1y, It1z, Qy1, Qt1y, Qt1z;
-    static int32_t Iy2, It2y, It2z, Qy2, Qt2y, Qt2z;
-
     /* FIR compensation filter buffers */
-    static float firI[32], firQ[32];
-
-    float Isum, Qsum;
+    static float firI[32] = {0.0},
+                 firQ[32] = {0.0};
 
     /* Convert unsigned to signed */
-    for (uint32_t i = 0; i < sigLenght; i++)
-        // XOR with a binary mask to flip the first bit (sign)
-        sigIn[i] ^= 0x80;
+    for (uint32_t i = 0; i < samples_count; i++) {
+        sigIn[i] ^= 0x80;  // XOR with a binary mask to flip the first bit (sign)
+    }
 
     /* Economic mixer @ fs/4 (upper band)
        At fs/4, sin and cosin calculation are no longer necessary.
@@ -171,12 +166,13 @@ static void rtlsdr_callback(unsigned char *samples,
              ----------------------------
        sin =   0   |  1   |  0   |  -1  |
        cos =   1   |  0   | -1   |   0  |
+
        out_I = in_I * cos(x) - in_Q * sin(x)
        out_Q = in_Q * cos(x) + in_I * sin(x)
        (Weaver technique, keep the upper band, IQ inverted on RTL devices)
     */
     int8_t tmp;
-    for (uint32_t i = 0; i < sigLenght; i += 8) {
+    for (uint32_t i = 0; i < samples_count; i += 8) {
         tmp = -sigIn[i + 3];
         sigIn[i + 3] = sigIn[i + 2];
         sigIn[i + 2] = tmp;
@@ -195,14 +191,15 @@ static void rtlsdr_callback(unsigned char *samples,
              * Understanding cascaded integrator-comb filters
                http://www.embedded.com/design/configurable-systems/4006446/Understanding-cascaded-integrator-comb-filters
     */
-    for (int32_t i = 0; i < sigLenght / 2; i++) {
+    for (int32_t i = 0; i < samples_count / 2; i++) {
         /* Integrator stages (N=2) */
+        // EVAL: option to move sigIn in float here
         Ix1 += (int32_t)sigIn[i * 2];
         Qx1 += (int32_t)sigIn[i * 2 + 1];
         Ix2 += Ix1;
         Qx2 += Qx1;
 
-        /* Decimation R=6400 */
+        /* Decimation stage */
         decimationIndex++;
         if (decimationIndex <= DOWNSAMPLING) {
             continue;
@@ -225,9 +222,8 @@ static void rtlsdr_callback(unsigned char *samples,
         Qt2z = Qt2y;
         Qt2y = Qy1;
 
-        // FIXME/TODO : could be made with int32_t (8 bits, 20 bits)
         /* FIR compensation filter */
-        Isum = 0.0, Qsum = 0.0;
+        float Isum = 0.0, Qsum = 0.0;
         for (uint32_t j = 0; j < 32; j++) {
             Isum += firI[j] * zCoef[j];
             Qsum += firQ[j] * zCoef[j];
@@ -244,18 +240,17 @@ static void rtlsdr_callback(unsigned char *samples,
         /* Save the result in the buffer */
         if (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
             /* Lock the buffer during writing */
-            pthread_rwlock_wrlock(&dec.rw);
-            rx_state.iSamples[rx_state.iqIndex] = Isum / (4096.0 * DOWNSAMPLING);
-            rx_state.qSamples[rx_state.iqIndex] = Qsum / (4096.0 * DOWNSAMPLING);
-            // FIXME 4096 > (1/2^7)*32, signetd 8 bit sample + FIR correction
-            pthread_rwlock_unlock(&dec.rw);
+            pthread_rwlock_wrlock(&dec_state.rw);
+            rx_state.iSamples[rx_state.iqIndex] = Isum / (8192.0 * DOWNSAMPLING);
+            rx_state.qSamples[rx_state.iqIndex] = Qsum / (8192.0 * DOWNSAMPLING);
+            pthread_rwlock_unlock(&dec_state.rw);
             rx_state.iqIndex++;
         } else {
             if (rx_state.decode_flag == false) {
                 /* Send a signal to the other thread to start the decoding */
-                pthread_mutex_lock(&dec.ready_mutex);
-                pthread_cond_signal(&dec.ready_cond);
-                pthread_mutex_unlock(&dec.ready_mutex);
+                pthread_mutex_lock(&dec_state.ready_mutex);
+                pthread_cond_signal(&dec_state.ready_cond);
+                pthread_mutex_unlock(&dec_state.ready_mutex);
                 rx_state.decode_flag = true;
             }
         }
@@ -281,85 +276,121 @@ void postSpots(uint32_t n_results) {
     // use struct decoder_results
     // use snprintf
 
-    const unsigned char headerDescriptor[] = {
-        0x00, 0x0A,                                      // ID
-        0x00, 0x00, 0x00, 0x00,                          // Message Length (update)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // CurrentDateTime (update)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // Sequence Number (update)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00   // Random number (update)
-    };
+    // const unsigned char headerDescriptor[] = {
+    //     0x00, 0x0A,                                      // ID
+    //     0x00, 0x00, 0x00, 0x00,                          // Message Length (update)
+    //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // CurrentDateTime (update)
+    //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // Sequence Number (update)
+    //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00   // Random number (update)
+    // };
 
-    const unsigned char rxInfoDescriptor[] = {  // (RX = RTLsdr owner)
-        0x00, 0x03,                          // Options Template Set ID
-        0x00, 0x2C,                          // Length
-        0x50, 0xE2,                          // Link ID
-        0x00, 0x04,                          // Field Count
-        0x00, 0x00,                          // Scope Field Count
-        0x80, 0x02,                          // Receiver Callsign ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x04,                          // Receiver Locator ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x08,                          // Receiver Decoder Software ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x09,                          // Receiver Antenna ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x00, 0x00                           // Padding
-    };
+    // const unsigned char rxInfoDescriptor[] = {  // (RX = RTLsdr owner)
+    //     0x00, 0x03,                          // Options Template Set ID
+    //     0x00, 0x2C,                          // Length
+    //     0x50, 0xE2,                          // Link ID
+    //     0x00, 0x04,                          // Field Count
+    //     0x00, 0x00,                          // Scope Field Count
+    //     0x80, 0x02,                          // Receiver Callsign ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x80, 0x04,                          // Receiver Locator ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x80, 0x08,                          // Receiver Decoder Software ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x80, 0x09,                          // Receiver Antenna ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x00, 0x00                           // Padding
+    // };
 
-    const unsigned char txInfoDescriptor[] = {  // (TX = Signal received)
-        0x00, 0x02,                          // Options Template Set ID
-        0x00, 0x3C,                          // Length
-        0x50, 0xE3,                          // Link ID
-        0x00, 0x07,                          // Field Count
-        0x80, 0x01,                          // Sender Callsign ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x05,                          // Frequency ID
-        0x00, 0x04, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (4) length & enterprise number
-        0x80, 0x06,                          // SNR ID
-        0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
-        0x80, 0x0A,                          // Mode ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x03,                          // Sender Locator ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x0B,                          // Information Source ID
-        0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
-        0x00, 0x96,                          // DateTimeSeconds ID
-        0x00, 0x04                           // Field Length
-    };
+    // const unsigned char txInfoDescriptor[] = {  // (TX = Signal received)
+    //     0x00, 0x02,                          // Options Template Set ID
+    //     0x00, 0x3C,                          // Length
+    //     0x50, 0xE3,                          // Link ID
+    //     0x00, 0x07,                          // Field Count
+    //     0x80, 0x01,                          // Sender Callsign ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x80, 0x05,                          // Frequency ID
+    //     0x00, 0x04, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (4) length & enterprise number
+    //     0x80, 0x06,                          // SNR ID
+    //     0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
+    //     0x80, 0x0A,                          // Mode ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x80, 0x03,                          // Sender Locator ID
+    //     0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
+    //     0x80, 0x0B,                          // Information Source ID
+    //     0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
+    //     0x00, 0x96,                          // DateTimeSeconds ID
+    //     0x00, 0x04                           // Field Length
+    // };
 
-    // FT4
-    // socket.sendto(packet, ("report.pskreporter.info", 4739))
-    // TX every 5 minutes
+    // // FT8 tag
+    // // socket.sendto(packet, ("report.pskreporter.info", 4739))
+    // // TX every 5 minutes
 
-    const unsigned char rxInfoData[] = "\x50\xE2+++"; // Malloc
-    const unsigned char txInfoData[] = "\x50\xE3+++"; // Malloc
+    // const unsigned char rxInfoData[] = "\x50\xE2+++"; // Malloc
+    // const unsigned char txInfoData[] = "\x50\xE3+++"; // Malloc
+
+    return;
+}
+
+
+void printSpots(uint32_t n_results) {
+    printf("  Score     Freq       Call    Loc\n");
+
+    for (uint32_t i = 0; i < n_results; i++) {
+        printf("     %2d %8d %10s %6s\n",
+               dec_results[i].snr,
+               dec_results[i].freq,
+               dec_results[i].call,
+               dec_results[i].loc);
+    }
+}
+
+
+void saveSample(float *iSamples, float *qSamples) {
+    if (rx_options.writefile == true) {
+        char filename[32];
+
+        time_t rawtime;
+        time(&rawtime);
+        struct tm *gtm = gmtime(&rawtime);
+
+        snprintf(filename, sizeof(filename) - 1, "%.8s_%04d-%02d-%02d_%02d-%02d-%02d.iq",
+                 rx_options.filename,
+                 gtm->tm_year + 1900,
+                 gtm->tm_mon + 1,
+                 gtm->tm_mday,
+                 gtm->tm_hour,
+                 gtm->tm_min,
+                 gtm->tm_sec);
+
+        writeRawIQfile(iSamples, qSamples, filename);
+    }
 }
 
 
 static void *decoder(void *arg) {
-    /* FT8 decoder use buffers of 180000 samples
-       (15 sec max @ 12000sps = 180000 samples)
+    /* FT8 decoder use buffers of 48000 samples
+       (15 sec max @ 3200sps = 48000 samples)
     */
-    static float iSamples[SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE] = {0};
-    static float qSamples[SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE] = {0};
+    static float iSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
+    static float qSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
     static uint32_t samples_len;
     int32_t n_results = 0;
 
     while (!rx_state.exit_flag) {
-        pthread_mutex_lock(&dec.ready_mutex);
-        pthread_cond_wait(&dec.ready_cond, &dec.ready_mutex);
-        pthread_mutex_unlock(&dec.ready_mutex);
+        pthread_mutex_lock(&dec_state.ready_mutex);
+        pthread_cond_wait(&dec_state.ready_cond, &dec_state.ready_mutex);
+        pthread_mutex_unlock(&dec_state.ready_mutex);
 
-        if (rx_state.exit_flag)  // Abort case, final sig
-            break;
+        if (rx_state.exit_flag)
+            break;  /* Abort case, final sig */
 
         /* Lock the buffer access and make a local copy */
-        pthread_rwlock_wrlock(&dec.rw);
+        pthread_rwlock_wrlock(&dec_state.rw);
         memcpy(iSamples, rx_state.iSamples, rx_state.iqIndex * sizeof(float));
         memcpy(qSamples, rx_state.qSamples, rx_state.iqIndex * sizeof(float));
         samples_len = rx_state.iqIndex;  // Overkill ?
-        assert(samples_len == SIGNAL_NUM_SAMPLES);
-        pthread_rwlock_unlock(&dec.rw);
+        pthread_rwlock_unlock(&dec_state.rw);
 
         /* Date and time will be updated/overload during the search & decoding process
            Make a simple copy
@@ -368,10 +399,10 @@ static void *decoder(void *arg) {
         memcpy(dec_options.uttime, rx_options.uttime, sizeof(rx_options.uttime));
 
         /* Search & decode the signal */
-        ft8_subsystem(iSamples, qSamples, dec_results, &n_results);
-
-        // DISABLED -- WIP
+        ft8_subsystem(iSamples, qSamples, samples_len, dec_results, &n_results);
+        saveSample(iSamples, qSamples);
         //postSpots(n_results);
+        printSpots(n_results);
     }
     pthread_exit(NULL);
 }
@@ -442,19 +473,22 @@ void initSampleStorage() {
 
 /* Default options for the receiver */
 void initrx_options() {
-    rx_options.gain = 290;
-    rx_options.autogain = 0;
-    rx_options.ppm = 0;
-    rx_options.shift = 0;
+    rx_options.gain           = 290;
+    rx_options.autogain       = 0;
+    rx_options.ppm            = 0;
+    rx_options.shift          = 0;
     rx_options.directsampling = 0;
-    rx_options.maxloop = 0;
-    rx_options.device = 0;
+    rx_options.maxloop        = 0;
+    rx_options.device         = 0;
+    rx_options.selftest       = false;
+    rx_options.writefile      = false;
+    rx_options.readfile       = false;
 }
 
 
 void initFFTW() {
     /* Recover existing FFTW optimisations */
-    if ((fp_fftw_wisdom_file = fopen("wspr_wisdom.dat", "r"))) {
+    if ((fp_fftw_wisdom_file = fopen("fftw_wisdom.dat", "r"))) {
         fftwf_import_wisdom_from_file(fp_fftw_wisdom_file);
         fclose(fp_fftw_wisdom_file);
     }
@@ -480,7 +514,7 @@ void freeFFTW() {
   fftwf_free(fft_in);
   fftwf_free(fft_out);
 
-  if ((fp_fftw_wisdom_file = fopen("wspr_wisdom.dat", "w"))) {
+  if ((fp_fftw_wisdom_file = fopen("fftw_wisdom.dat", "w"))) {
       fftwf_export_wisdom_to_file(fp_fftw_wisdom_file);
       fclose(fp_fftw_wisdom_file);
   }
@@ -494,97 +528,203 @@ void sigint_callback_handler(int signum) {
 }
 
 
-int32_t readfile(float *iSamples, float *qSamples, char *filename) {
-    FILE *fd = NULL;
-    float filebuffer[2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];
+int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename) {
+    float filebuffer[2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];  // Allocate the max. size allowed
+    FILE *fd = fopen(filename, "rb");
 
-    fd = fopen(filename, "rb");
     if (fd == NULL) {
         fprintf(stderr, "Cannot open data file...\n");
-        return 1;
+        return 0;
     }
 
-    int32_t res = fseek(fd, 26, SEEK_SET);
-    if (res) {
-        fprintf(stderr, "Cannot set file offset...\n");
+    /* Get the size of the file */
+    fseek(fd, 0L, SEEK_END);
+    int32_t recsize = ftell(fd) / (2 * sizeof(float));
+    fseek(fd, 0L, SEEK_SET);
+
+
+    /* Limit the file/buffer to 45000 samples (120 sec signal) */
+    if (recsize > SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) {
+        recsize = SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE;
+    }
+
+    /* Read the iq file */
+    int32_t nread = fread(filebuffer, sizeof(float), 2 * recsize, fd);
+    if (nread != 2 * recsize) {
+        fprintf(stderr, "Cannot read all the data! %d\n", nread);
         fclose(fd);
-        return 1;
-    }
-
-    int32_t nread = fread(filebuffer, sizeof(float), 2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE, fd);
-    if (nread != 2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) {
-        fprintf(stderr, "Cannot read all the data!\n");
+        return 0;
+    } else {
         fclose(fd);
-        return 1;
     }
 
-    for (int32_t i = 0; i < SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE; i++) {
-        iSamples[i] = filebuffer[2 * i];
-        qSamples[i] = -filebuffer[2 * i + 1];
+    /* Convert the interleaved buffer into 2 buffers */
+    for (int32_t i = 0; i < recsize; i++) {
+        iSamples[i] =  filebuffer[2 * i];
+        qSamples[i] = -filebuffer[2 * i + 1];  // neg, convention used by wsprsim
     }
 
-    fclose(fd);
-
-    return 0;
+    return recsize;
 }
 
 
-int32_t writefile(float *iSamples, float *qSamples, char *filename, uint32_t type, double freq) {
-    FILE *fd = NULL;
-    char info[15] = {};  // Info descriptor, not used for now
-
+int32_t writeRawIQfile(float *iSamples, float *qSamples, char *filename) {
     float filebuffer[2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];
-    for (int32_t i = 0; i < SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE; i++) {
-        filebuffer[2 * i] = iSamples[i];
-        filebuffer[2 * i + 1] = -qSamples[i];
-    }
 
-    fd = fopen(filename, "wb");
+    FILE *fd = fopen(filename, "wb");
     if (fd == NULL) {
         fprintf(stderr, "Cannot open data file...\n");
-        return 1;
+        return 0;
     }
 
-    // Header
-    fwrite(&info, sizeof(char), 14, fd);
-    fwrite(&type, sizeof(uint32_t), 1, fd);
-    fwrite(&freq, sizeof(double), 1, fd);
+    for (int32_t i = 0; i < SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE; i++) {
+        filebuffer[2 * i]     =  iSamples[i];
+        filebuffer[2 * i + 1] = -qSamples[i];  // neg, convention used by wsprsim
+    }
 
     int32_t nwrite = fwrite(filebuffer, sizeof(float), 2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE, fd);
     if (nwrite != 2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) {
         fprintf(stderr, "Cannot write all the data!\n");
-        return 1;
+        return 0;
     }
 
     fclose(fd);
+    return SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE;
+}
 
-    return 0;
+
+void decodeRecordedFile(char *filename) {
+    static float iSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
+    static float qSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
+    static uint32_t samples_len;
+    int32_t n_results = 0;
+
+    samples_len = readRawIQfile(iSamples, qSamples, filename);
+    printf("Number of samples: %d\n", samples_len);
+
+    if (samples_len) {
+        /* Search & decode the signal */
+        ft8_subsystem(iSamples, qSamples, samples_len, dec_results, &n_results);
+
+        printSpots(n_results);
+    }
+}
+
+
+float whiteGaussianNoise(float factor) {
+    static double V1, V2, U1, U2, S, X;
+    static int phase = 0;
+
+    if (phase == 0) {
+        do {
+            U1 = rand() / (double)RAND_MAX;
+            U2 = rand() / (double)RAND_MAX;
+            V1 = 2 * U1 - 1;
+            V2 = 2 * U2 - 1;
+            S = V1 * V1 + V2 * V2;
+        } while(S >= 1 || S == 0);
+
+        X = V1 * sqrt(-2 * log(S) / S);
+    } else {
+        X = V2 * sqrt(-2 * log(S) / S);
+    }
+
+    phase = 1 - phase;
+    return (float)X * factor;
+}
+
+
+int32_t ft8DecoderSelfTest() {
+    static float iSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
+    static float qSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
+    static uint32_t samples_len = SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE;
+    int32_t n_results = 0;
+
+    /* Ref test message
+     * Message : "CQ K1JT FN20QI"
+     * Packed data: 00 00 00 20 4d fc dc 8a 14 08
+     * FSK tones: 3140652000000001005477547106035036373140652547441342116056460065174427143140652
+     */
+    const char message[] = "CQ K1JT FN20QI";
+    uint8_t packed[FT8_LDPC_K_BYTES];
+
+    if (pack77(message, packed) < 0){
+        printf("Cannot parse message!\n");
+        return 0;
+    }
+
+    // Second, encode the binary message as a sequence of FSK tones
+    uint8_t tones[FT8_NN];
+    ft8_encode(packed, tones);
+
+
+    // Encoding, simple FSK modulation
+    float  f0  = 50.0;
+    float  t0  = 0.0;  // Caution!! Possible buffer overflow with the index calculation (no user input here!)
+    float  amp = 0.5;
+    float  wgn = 0.02;
+    double phi = 0.0;
+    double df  = 3200.0 / 512.0;
+    double dt  = 1 / 3200.0;
+    double twopidt = 8.0 * atan(1.0) / 3200.0;
+
+    // Add signal
+    for (int i = 0; i < FT8_NN; i++) {
+        double dphi = twopidt * (f0 + ( (double)tones[i]-3.5) * df);
+        for (int j = 0; j < 512; j++) {
+            int index = t0 / dt + 512 * i + j;
+            iSamples[index] = amp * cos(phi) + whiteGaussianNoise(wgn);
+            qSamples[index] = amp * sin(phi) + whiteGaussianNoise(wgn);
+            phi = phi + dphi;
+        }
+    }
+    
+    /* Save the test sample */
+    writeRawIQfile(iSamples, qSamples, "selftest.iq");
+
+    /* Search & decode the signal */
+    ft8_subsystem(iSamples, qSamples, samples_len, dec_results, &n_results);
+
+    printSpots(n_results);
+
+    /* Simple consistency check */
+    if (strcmp(dec_results[0].call, "K1JT") &&
+        strcmp(dec_results[0].loc,  "FN20")) {
+        return 0;
+    } else {
+        return 1;
+    }
 }
 
 
 void usage(void) {
     fprintf(stderr,
             "rtlsdr_ft8d, a simple FT8 daemon for RTL receivers\n\n"
-            "Use:\trtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
+            "Use:\rtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
             "\t-f dial frequency [(,k,M) Hz] or band string\n"
             "\t   If band string is used, the default dial frequency will used.\n"
-            "\t   Bands: 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
-            "\t   ('-15' suffix indicates the WSPR-15 region of band.)\n"
+            "\t   Bands: LF MF 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
             "\t-c your callsign (12 chars max)\n"
             "\t-l your locator grid (6 chars max)\n"
             "Receiver extra options:\n"
             "\t-g gain [0-49] (default: 29)\n"
-            "\t-a auto gain (default: off)\n"
+            "\t-a auto gain (off by default, no parameter)\n"
             "\t-o frequency offset (default: 0)\n"
             "\t-p crystal correction factor (ppm) (default: 0)\n"
             "\t-u upconverter (default: 0, example: 125M)\n"
             "\t-d direct dampling [0,1,2] (default: 0, 1 for I input, 2 for Q input)\n"
             "\t-n max iterations (default: 0 = infinite loop)\n"
             "\t-i device index (in case of multiple receivers, default: 0)\n"
+            "Debugging options:\n"
+            "\t-t decoder self-test (generate a signal & decode), no parameter\n"
+            "\t-w write received signal and exit [filename prefix]\n"
+            "\t-r read signal, decode and exit [filename]\n"
+            "\t   (raw format: 3200sps, float 32 bits, 2 channels)\n"
             "Example:\n"
-            "\trtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29 -o -4200\n");
+            "\rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29\n");
     exit(1);
 }
+
 
 int main(int argc, char **argv) {
     uint32_t opt;
@@ -595,49 +735,56 @@ int main(int argc, char **argv) {
 
     initrx_options();
 
+    /* FFTW init & allocation */
+    initFFTW();
+
     /* Stop condition setup */
-    rx_state.exit_flag = false;
+    rx_state.exit_flag   = false;
     rx_state.decode_flag = false;
     uint32_t nLoop = 0;
 
     if (argc <= 1)
         usage();
 
-    while ((opt = getopt(argc, argv, "f:c:l:g:a:o:p:u:d:n:i:H:Q:S")) != -1) {
+    while ((opt = getopt(argc, argv, "f:c:l:g:ao:p:u:dn:i:tw:r:")) != -1) {
         switch (opt) {
             case 'f':  // Frequency
-                if (!strcasecmp(optarg, "160m")) {
-                    rx_options.dialfreq = 1840000;
+                if (!strcasecmp(optarg, "LF")) {
+                    rx_options.dialfreq = 136000;
+                } else if (!strcasecmp(optarg, "MF")) {
+                    rx_options.dialfreq = 474200;
+                } else if (!strcasecmp(optarg, "160m")) {
+                    rx_options.dialfreq = 1836600;
                 } else if (!strcasecmp(optarg, "80m")) {
-                    rx_options.dialfreq = 3573000;
+                    rx_options.dialfreq = 3592600;
                 } else if (!strcasecmp(optarg, "60m")) {
-                    rx_options.dialfreq = 5357000;
+                    rx_options.dialfreq = 5287200;
                 } else if (!strcasecmp(optarg, "40m")) {
-                    rx_options.dialfreq = 7074000;
+                    rx_options.dialfreq = 7038600;
                 } else if (!strcasecmp(optarg, "30m")) {
-                    rx_options.dialfreq = 10136000;
+                    rx_options.dialfreq = 10138700;
                 } else if (!strcasecmp(optarg, "20m")) {
-                    rx_options.dialfreq = 14074000;
+                    rx_options.dialfreq = 14095600;
                 } else if (!strcasecmp(optarg, "17m")) {
-                    rx_options.dialfreq = 18100000;
+                    rx_options.dialfreq = 18104600;
                 } else if (!strcasecmp(optarg, "15m")) {
-                    rx_options.dialfreq = 21074000;
+                    rx_options.dialfreq = 21094600;
                 } else if (!strcasecmp(optarg, "12m")) {
-                    rx_options.dialfreq = 24915000;
+                    rx_options.dialfreq = 24924600;
                 } else if (!strcasecmp(optarg, "10m")) {
-                    rx_options.dialfreq = 28074000;
+                    rx_options.dialfreq = 28124600;
                 } else if (!strcasecmp(optarg, "6m")) {
-                    rx_options.dialfreq = 50313000;
+                    rx_options.dialfreq = 50293000;
                 } else if (!strcasecmp(optarg, "4m")) {
-                    rx_options.dialfreq = 70100000;
+                    rx_options.dialfreq = 70091000;
                 } else if (!strcasecmp(optarg, "2m")) {
-                    rx_options.dialfreq = 144174000;
+                    rx_options.dialfreq = 144489000;
                 } else if (!strcasecmp(optarg, "1m25")) {
-                    rx_options.dialfreq = 222065000;
+                    rx_options.dialfreq = 222280000;
                 } else if (!strcasecmp(optarg, "70cm")) {
-                    rx_options.dialfreq = 432065000;
+                    rx_options.dialfreq = 432300000;
                 } else if (!strcasecmp(optarg, "23cm")) {
-                    rx_options.dialfreq = 1296174000;
+                    rx_options.dialfreq = 1296500000;
                 } else {
                     rx_options.dialfreq = (uint32_t)atofs(optarg);
                 }
@@ -655,21 +802,19 @@ int main(int argc, char **argv) {
                 rx_options.gain *= 10;
                 break;
             case 'a':  // Auto gain
-                rx_options.autogain = atoi(optarg);
-                if (rx_options.autogain < 0) rx_options.autogain = 0;
-                if (rx_options.autogain > 1) rx_options.autogain = 1;
+                rx_options.autogain = 1;
                 break;
             case 'o':  // Fine frequency correction
                 rx_options.shift = atoi(optarg);
                 break;
-            case 'p':
+            case 'p':  // Crystal correction
                 rx_options.ppm = atoi(optarg);
                 break;
             case 'u':  // Upconverter frequency
                 rx_options.upconverter = (uint32_t)atofs(optarg);
                 break;
             case 'd':  // Direct Sampling
-                rx_options.directsampling = (uint32_t)atofs(optarg);
+                rx_options.directsampling = 1;
                 break;
             case 'n':  // Stop after n iterations
                 rx_options.maxloop = (uint32_t)atofs(optarg);
@@ -677,10 +822,42 @@ int main(int argc, char **argv) {
             case 'i':  // Select the device to use
                 rx_options.device = (uint32_t)atofs(optarg);
                 break;
+            case 't':  // Seft test (used in unit-test CI pipeline)
+                rx_options.selftest = true;
+                break;
+            case 'w':  // Read a signal and decode
+                rx_options.writefile = true;
+                snprintf(rx_options.filename, sizeof(rx_options.filename), "%.32s", optarg);
+                break;
+            case 'r':  // Write a signal and exit
+                rx_options.readfile = true;
+                snprintf(rx_options.filename, sizeof(rx_options.filename), "%.32s", optarg);
+                break;
             default:
                 usage();
                 break;
         }
+    }
+
+    if (rx_options.selftest == true) {
+        if (ft8DecoderSelfTest()) {
+            fprintf(stdout, "Self-test SUCCESS!\n");
+            exit(0);
+        }
+        else {
+            fprintf(stderr, "Self-test FAILED!\n");
+            exit(1);
+        }
+    }
+
+    if (rx_options.readfile == true) {
+        fprintf(stdout, "Reading IQ file: %s\n", rx_options.filename);
+        decodeRecordedFile(rx_options.filename);
+        exit(0);
+    }
+
+    if (rx_options.writefile == true) {
+        fprintf(stdout, "Saving IQ file planned with prefix: %.8s\n", rx_options.filename);
     }
 
     if (rx_options.dialfreq == 0) {
@@ -707,11 +884,15 @@ int main(int argc, char **argv) {
     /* Store the frequency used for the decoder */
     dec_options.freq = rx_options.dialfreq;
 
+    /* RX buffer allocation */
+    rx_state.iSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
+    rx_state.qSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
+
     /* If something goes wrong... */
-    signal(SIGINT, &sigint_callback_handler);
+    signal(SIGINT,  &sigint_callback_handler);
     signal(SIGTERM, &sigint_callback_handler);
-    signal(SIGILL, &sigint_callback_handler);
-    signal(SIGFPE, &sigint_callback_handler);
+    signal(SIGILL,  &sigint_callback_handler);
+    signal(SIGFPE,  &sigint_callback_handler);
     signal(SIGSEGV, &sigint_callback_handler);
     signal(SIGABRT, &sigint_callback_handler);
 
@@ -797,19 +978,16 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    /* FFTW init & allocation */
-    initFFTW();
 
-    /* RX buffer allocation */
-    rx_state.iSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
-    rx_state.qSamples = malloc(sizeof(float) * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE);
-
-    /* Print used parameter */
+    /* Time & date tools */
     time_t rawtime;
     time(&rawtime);
     struct tm *gtm = gmtime(&rawtime);
+    struct timeval lTime;
+    gettimeofday(&lTime, NULL);
 
-    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.1alpha\n",
+    /* Print used parameter */
+    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.2alpha\n",
            gtm->tm_year + 1900, gtm->tm_mon + 1, gtm->tm_mday, gtm->tm_hour, gtm->tm_min);
     printf("  Callsign     : %s\n", dec_options.rcall);
     printf("  Locator      : %s\n", dec_options.rloc);
@@ -821,31 +999,30 @@ int main(int argc, char **argv) {
     else
         printf("  Gain         : %d dB\n", rx_options.gain / 10);
 
+    // FIXME: time adjustment @ 14s or 14.5s
+
     /* Time alignment stuff */
-    struct timeval lTime;
-    gettimeofday(&lTime, NULL);
     uint32_t sec = lTime.tv_sec % 15;
     uint32_t usec = sec * 1000000 + lTime.tv_usec;
     uint32_t uwait = 15000000 - usec;
     printf("Wait for time sync (start in %d sec)\n\n", uwait / 1000000);
-    printf("              Date  Time(z)    SNR     DT       Freq Dr    Call    Loc Pwr\n");
 
     /* Prepare a low priority param for the decoder thread */
     struct sched_param param;
-    pthread_attr_init(&dec.tattr);
-    pthread_attr_setschedpolicy(&dec.tattr, SCHED_RR);
-    pthread_attr_getschedparam(&dec.tattr, &param);
+    pthread_attr_init(&dec_state.tattr);
+    pthread_attr_setschedpolicy(&dec_state.tattr, SCHED_RR);
+    pthread_attr_getschedparam(&dec_state.tattr, &param);
     param.sched_priority = 90;  // = sched_get_priority_min();
-    pthread_attr_setschedparam(&dec.tattr, &param);
+    pthread_attr_setschedparam(&dec_state.tattr, &param);
 
     /* Create a thread and stuff for separate decoding
        Info : https://computing.llnl.gov/tutorials/pthreads/
     */
-    pthread_rwlock_init(&dec.rw, NULL);
-    pthread_cond_init(&dec.ready_cond, NULL);
-    pthread_mutex_init(&dec.ready_mutex, NULL);
+    pthread_rwlock_init(&dec_state.rw, NULL);
+    pthread_cond_init(&dec_state.ready_cond, NULL);
+    pthread_mutex_init(&dec_state.ready_mutex, NULL);
     pthread_create(&dongle.thread, NULL, rtlsdr_rx, NULL);
-    pthread_create(&dec.thread, &dec.tattr, decoder, NULL);
+    pthread_create(&dec_state.thread, &dec_state.tattr, decoder, NULL);
 
     /* Main loop : Wait, read, decode */
     while (!rx_state.exit_flag && !(rx_options.maxloop && (nLoop >= rx_options.maxloop))) {
@@ -859,7 +1036,6 @@ int main(int argc, char **argv) {
         /* Use the Store the date at the begin of the frame */
         time(&rawtime);
         gtm = gmtime(&rawtime);
-        // FIXME: Compiler warning about mixing int & date
         snprintf(rx_options.date, sizeof(rx_options.date), "%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
         snprintf(rx_options.uttime, sizeof(rx_options.uttime), "%02d%02d", gtm->tm_hour, gtm->tm_min);
 
@@ -876,21 +1052,6 @@ int main(int argc, char **argv) {
     /* Stop the RX and free the blocking function */
     rtlsdr_cancel_async(rtl_device);
 
-    // FIXME: TESTING the pthread wait before closing the device...
-
-    /* Wait the thread join (send a signal before to terminate the job) */
-    pthread_mutex_lock(&dec.ready_mutex);
-    pthread_cond_signal(&dec.ready_cond);
-    pthread_mutex_unlock(&dec.ready_mutex);
-    pthread_join(dec.thread, NULL);
-    pthread_join(dongle.thread, NULL);
-
-    /* Destroy the lock/cond/thread */
-    pthread_rwlock_destroy(&dec.rw);
-    pthread_cond_destroy(&dec.ready_cond);
-    pthread_mutex_destroy(&dec.ready_mutex);
-    pthread_exit(NULL);
-
     /* Close the RTL device */
     rtlsdr_close(rtl_device);
 
@@ -898,6 +1059,19 @@ int main(int argc, char **argv) {
     freeFFTW();
 
     printf("Bye!\n");
+
+    /* Wait the thread join (send a signal before to terminate the job) */
+    pthread_mutex_lock(&dec_state.ready_mutex);
+    pthread_cond_signal(&dec_state.ready_cond);
+    pthread_mutex_unlock(&dec_state.ready_mutex);
+    pthread_join(dec_state.thread, NULL);
+    pthread_join(dongle.thread, NULL);
+
+    /* Destroy the lock/cond/thread */
+    pthread_rwlock_destroy(&dec_state.rw);
+    pthread_cond_destroy(&dec_state.ready_cond);
+    pthread_mutex_destroy(&dec_state.ready_mutex);
+    pthread_exit(NULL);
 
     return EXIT_SUCCESS;
 }
@@ -909,11 +1083,13 @@ int main(int argc, char **argv) {
  * - http://laarc.weebly.com/uploads/7/3/2/9/73292865/ft8syncv8.pdf
  * - http://www.sportscliche.com/wb2fko/WB2FKO_TAPR_revised.pdf
  */
-
 void ft8_subsystem(float *iSamples,
                    float *qSamples,
+                   uint32_t samples_len,
                    struct decoder_results *decodes,
                    int32_t *n_results) {
+
+    // FIXME: adjust with samples_len !!
 
     /* Compute FFT over the whole signal and store it */
     uint8_t mag_power[MAG_ARRAY];
@@ -927,18 +1103,15 @@ void ft8_subsystem(float *iSamples,
             float mag_db[NFFT];
 
             for (int i = 0; i < NFFT; ++i) {
-                fft_in[i][0] = qSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
-                fft_in[i][1] = iSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
+                fft_in[i][0] = iSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
+                fft_in[i][1] = qSamples[(idx_block * BLOCK_SIZE) + (time_sub * SUB_BLOCK_SIZE) + i] * hann[i];
             }
-
             fftwf_execute(fft_plan);
 
             // Compute log magnitude in decibels
             for (int i = 0; i < NFFT; ++i) {
                 float mag2 = fft_out[i][0] * fft_out[i][0] + fft_out[i][1] * fft_out[i][1];
                 mag_db[i] = 10.0f * log10f(1E-12f + mag2 * 4.0f / (NFFT * NFFT));
-                // const float fft_norm = 2.0f / NFFT;
-                // fft_norm^2 = 4.0f / (NFFT * NFFT);
             }
 
             // Loop over two possible frequency bin offsets (for averaging)
@@ -958,7 +1131,7 @@ void ft8_subsystem(float *iSamples,
             }
         }
     }
-    fprintf(stderr, "Max magnitude: %.1f dB\n", max_mag);
+    //fprintf(stderr, "Max magnitude: %.1f dB\n", max_mag);
 
     /* Find top candidates by Costas sync score and localize them in time and frequency */
     candidate_t candidate_list[K_MAX_CANDIDATES];
@@ -981,6 +1154,8 @@ void ft8_subsystem(float *iSamples,
         decoded_hashtable[i] = NULL;
     }
 
+    //fprintf(stdout, "SNR  DT   Freq ~ Message\n");
+
     // Go over candidates and attempt to decode messages
     for (int idx = 0; idx < num_candidates; ++idx) {
         const candidate_t *cand = &candidate_list[idx];
@@ -988,49 +1163,57 @@ void ft8_subsystem(float *iSamples,
             continue;
 
         float freq_hz = (cand->freq_offset + (float)cand->freq_sub / K_FREQ_OSR) * K_FSK_DEV;
-        float time_sec = (cand->time_offset + (float)cand->time_sub / K_TIME_OSR) / K_FSK_DEV;
+        // float time_sec = (cand->time_offset + (float)cand->time_sub / K_TIME_OSR) / K_FSK_DEV;
+        // fprintf(stderr, "Checking hash table for %4.1fs / %4.1fHz [%d]...\n", time_sec, freq_hz, cand->score);
 
         message_t message;
         decode_status_t status;
         if (!ft8_decode(&power, cand, &message, K_LDPC_ITERS, &status)) {
             if (status.ldpc_errors > 0) {
-                fprintf(stderr, "LDPC decode: %d errors\n", status.ldpc_errors);
+                //fprintf(stderr, "LDPC decode: %d errors\n", status.ldpc_errors);
             } else if (status.crc_calculated != status.crc_extracted) {
-                fprintf(stderr, "CRC mismatch!\n");
+                //fprintf(stderr, "CRC mismatch!\n");
             } else if (status.unpack_status != 0) {
-                fprintf(stderr, "Error while unpacking!\n");
+                //fprintf(stderr, "Error while unpacking!\n");
             }
             continue;
         }
 
-        fprintf(stderr, "Checking hash table for %4.1fs / %4.1fHz [%d]...\n", time_sec, freq_hz, cand->score);
         int idx_hash = message.hash % K_MAX_MESSAGES;
         bool found_empty_slot = false;
         bool found_duplicate = false;
         do {
             if (decoded_hashtable[idx_hash] == NULL) {
-                fprintf(stderr, "Found an empty slot\n");
+                //fprintf(stderr, "Found an empty slot\n");
                 found_empty_slot = true;
             } else if ((decoded_hashtable[idx_hash]->hash == message.hash) && (0 == strcmp(decoded_hashtable[idx_hash]->text, message.text))) {
-                fprintf(stderr, "Found a duplicate [%s]\n", message.text);
+                //fprintf(stderr, "Found a duplicate [%s]\n", message.text);
                 found_duplicate = true;
             } else {
-                fprintf(stderr, "Hash table clash!\n");
+                //fprintf(stderr, "Hash table clash!\n");
                 // Move on to check the next entry in hash table
                 idx_hash = (idx_hash + 1) % K_MAX_MESSAGES;
             }
         } while (!found_empty_slot && !found_duplicate);
 
+        /* Add this entry to an empty hashtable slot */
         if (found_empty_slot) {
-            // Fill the empty hashtable slot
             memcpy(&decoded[idx_hash], &message, sizeof(message));
             decoded_hashtable[idx_hash] = &decoded[idx_hash];
-            ++num_decoded;
 
-            // Fake WSJT-X-like output for now
-            // int snr = 0;  // TODO: compute SNR
-            printf("000000 %3d %+4.2f %4.0f ~  %s\n", cand->score, time_sec, freq_hz, message.text);
+            char *strPtr = strtok(message.text, " ");
+            if (!strncmp(strPtr, "CQ", 2)) {  // Only get the CQ messages
+                strPtr = strtok(NULL, " ");   // Move on the Callsign part
+                snprintf(decodes[num_decoded].call, sizeof(decodes[num_decoded].call), "%.12s", strPtr);
+                strPtr = strtok(NULL, " ");   // Move on the Locator part
+                snprintf(decodes[num_decoded].loc, sizeof(decodes[num_decoded].loc), "%.6s", strPtr);
+
+                decodes[num_decoded].freq = (int32_t)freq_hz;
+                decodes[num_decoded].snr  = (int32_t)cand->score;  // FIXME: it's not true, score != snr
+            }
+
+            num_decoded++;
         }
     }
-    fprintf(stderr, "Decoded %d messages\n", num_decoded);
+    *n_results = num_decoded;
 }
