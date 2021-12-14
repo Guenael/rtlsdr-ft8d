@@ -91,7 +91,7 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
        URL : https://github.com/WestCoastDSP/CIC_Octave_Matlab
      */
     
-    /* Coefs with R=750, N=2, Fo=0.90, L=32 */
+    /* Coefs with R=750, N=2, F0=0.90, L=32 */
     // UPDATE: Test with Delay=2
     const static float zCoef[FIR_TAPS+1] = {
          0.0088538954, -0.0097433988,  0.0109931573, -0.0107433733,
@@ -238,7 +238,7 @@ static void *decoder(void *arg) {
         uint32_t prevBuffer = (rx_state.bufferIndex + 1) % 2;
 
         /* Search & decode the signal */
-        printf("DBG -- Decoding bloc\n");
+        printf("DBG -- Decoding block\n");
         ft8_subsystem(rx_state.iSamples[prevBuffer],
                       rx_state.qSamples[prevBuffer],
                       SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE,
@@ -1081,7 +1081,7 @@ void ft8_subsystem(float *iSamples,
                 snprintf(decodes[num_decoded].loc, sizeof(decodes[num_decoded].loc), "%.6s", strPtr);
 
                 decodes[num_decoded].freq = (int32_t)freq_hz;
-                decodes[num_decoded].snr  = (int32_t)cand->score;  // UDPATE: it's not true, score != snr
+                decodes[num_decoded].snr  = (int32_t)cand->score;  // UPDATE: it's not true, score != snr
             }
 
             num_decoded++;
