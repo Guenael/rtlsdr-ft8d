@@ -31,6 +31,42 @@
 #include <unistd.h>
 
 
+/* Sampling definition for RTL devices & FT8 protocol */
+#define SIGNAL_LENGHT       14       // EVAL float here? 14.75?
+#define SIGNAL_SAMPLE_RATE  3200     // EVAL 6400 or 9600
+#define SAMPLING_RATE       2400000
+#define FS4_RATE            (SAMPLING_RATE / 4)
+#define DOWNSAMPLING        (SAMPLING_RATE / SIGNAL_SAMPLE_RATE)
+#define DEFAULT_BUF_LENGTH  (4 * 16384)
+#define FIR_TAPS            32
+
+
+#define K_MIN_SCORE         10
+#define K_MAX_CANDIDATES    120
+#define K_LDPC_ITERS        20
+#define K_MAX_MESSAGES      50
+#define K_FREQ_OSR          2
+#define K_TIME_OSR          2
+#define K_FSK_DEV           6.25f
+
+#define NUM_BIN             (uint32_t)(SIGNAL_SAMPLE_RATE / (2.0f * K_FSK_DEV)) // 256
+#define BLOCK_SIZE          (uint32_t)(SIGNAL_SAMPLE_RATE / K_FSK_DEV)          // 512
+#define SUB_BLOCK_SIZE      (uint32_t)(BLOCK_SIZE / K_TIME_OSR)                 // 256
+#define NFFT                (uint32_t)(BLOCK_SIZE * K_FREQ_OSR)                 // 1024
+#define NUM_BLOCKS          (uint32_t)(((SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) - NFFT + SUB_BLOCK_SIZE) / BLOCK_SIZE) // 92 vs 92.25 DCHECK
+#define MAG_ARRAY           (uint32_t)(NUM_BLOCKS * K_FREQ_OSR * K_TIME_OSR * NUM_BIN)            // 94208 vs 94464 DCHECK
+
+/* Possible PATIENCE options for FFTW:
+ * - FFTW_ESTIMATE
+ * - FFTW_ESTIMATE_PATIENT
+ * - FFTW_MEASURE
+ * - FFTW_PATIENT
+ * - FFTW_EXHAUSTIVE
+ */
+#define PATIENCE FFTW_ESTIMATE
+
+
+
 #ifndef bool
 	typedef uint32_t bool;
 	#define true  1
@@ -41,15 +77,17 @@
 
 struct receiver_state {
     /* Variables used for stop conditions */
-    bool exit_flag;
-    bool decode_flag;
+    bool     exit_flag;
 
-    /* Buffer used for sampling */
-    float *iSamples;
-    float *qSamples;
+    /* Double buffering used for sampling */
+    float    iSamples[2][SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];
+    float    qSamples[2][SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];
 
-    /* Simple index */
+    /* Sample index */
     uint32_t iqIndex;
+
+    /* Buffer selected (0 or 1) */
+    uint32_t bufferIndex;
 };
 
 
@@ -85,27 +123,25 @@ struct decoder_options {
 
 struct decoder_results {
     char     call[13];
+    char     loc[7];
     int32_t  freq;
     int32_t  snr;
-    char     loc[7];
-    // tx_mode // static > FT8
-    // tx_info // static > \x00
 };
 
 
 static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void *ctx);
 static void *rtlsdr_rx(void *arg);
+static void sigint_callback_handler(int signum);
+static void *decoder(void *arg);
 void postSpots(uint32_t n_results);
 void printSpots();
 void saveSample(float *iSamples, float *qSamples);
-static void *decoder(void *arg);
 double atofs(char *s);
 int32_t parse_u64(char *s, uint64_t *const value);
 void initSampleStorage();
 void initrx_options();
 void initFFTW();
 void freeFFTW();
-void sigint_callback_handler(int signum);
 int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename);
 int32_t writeRawIQfile(float *iSamples, float *qSamples, char *filename);
 void decodeRecordedFile(char *filename);
