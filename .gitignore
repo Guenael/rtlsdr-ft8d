@@ -1,2 +1,3 @@
 *.o
 rtlsdr_ft8d
+fftw_wisdom.dat
