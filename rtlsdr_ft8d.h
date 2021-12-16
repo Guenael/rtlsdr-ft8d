@@ -1,27 +1,19 @@
 /*
- * FreeBSD License
- * Copyright (c) 2016-2021, Guenael Jouchet (VA2GKA)
- * All rights reserved.
+ * rtlsrd-ft8d, FT8 daemon for RTL receivers
+ * Copyright (C) 2016-2021, Guenael Jouchet (VA2GKA)
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
 
@@ -31,14 +23,25 @@
 #include <unistd.h>
 
 
+#ifndef bool
+    typedef uint32_t bool;
+    #define true  1
+    #define false 0
+#endif
+
+
+#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
+#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
+
+
 /* Sampling definition for RTL devices & FT8 protocol */
-#define SIGNAL_LENGHT       14       // EVAL float here? 14.75?
-#define SIGNAL_SAMPLE_RATE  3200     // EVAL 6400 or 9600
+#define SIGNAL_LENGHT       15
+#define SIGNAL_SAMPLE_RATE  3200
 #define SAMPLING_RATE       2400000
 #define FS4_RATE            (SAMPLING_RATE / 4)
 #define DOWNSAMPLING        (SAMPLING_RATE / SIGNAL_SAMPLE_RATE)
 #define DEFAULT_BUF_LENGTH  (4 * 16384)
-#define FIR_TAPS            32
+#define FIR_TAPS            56
 
 
 #define K_MIN_SCORE         10
@@ -66,15 +69,16 @@
 #define PATIENCE FFTW_ESTIMATE
 
 
+/* Thread for decoding */
+struct decoder_thread {
+    pthread_t        thread;
+    pthread_attr_t   attr;
+    pthread_cond_t   ready_cond;
+    pthread_mutex_t  ready_mutex;
+};
 
-#ifndef bool
-	typedef uint32_t bool;
-	#define true  1
-	#define false 0
-#endif
 
-
-
+/* Option & config of the receiver */
 struct receiver_state {
     /* Variables used for stop conditions */
     bool     exit_flag;
@@ -90,8 +94,6 @@ struct receiver_state {
     uint32_t bufferIndex;
 };
 
-
-/* Option & config of the receiver */
 struct receiver_options {
     uint32_t dialfreq;
     uint32_t realfreq;
@@ -107,8 +109,8 @@ struct receiver_options {
     bool     writefile;
     bool     readfile;
     char     filename[33];
-    char     date[7];
-    char     uttime[5];
+    // char     date[7];
+    // char     uttime[5];
 };
 
 

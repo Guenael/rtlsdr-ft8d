@@ -40,24 +40,8 @@
 #include "./ft8_lib/ft8/encode.h"
 
 
-#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
-#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
-
-
-/* Global declaration for states & options, shared with other external objects */
-struct receiver_state   rx_state;
-struct receiver_options rx_options;
-struct decoder_options  dec_options;
-struct decoder_results  dec_results[50];
-
 
 /* Thread for decoding */
-struct decoder_thread {
-    pthread_t        thread;
-    pthread_attr_t   attr;
-    pthread_cond_t   ready_cond;
-    pthread_mutex_t  ready_mutex;
-};
 static struct decoder_thread decThread;
 
 
@@ -71,6 +55,13 @@ static fftwf_plan fft_plan;
 static fftwf_complex *fft_in, *fft_out;
 static FILE *fp_fftw_wisdom_file;
 static float *hann;
+
+
+/* Global declaration for states & options, shared with other external objects */
+struct receiver_state   rx_state;
+struct receiver_options rx_options;
+struct decoder_options  dec_options;
+struct decoder_results  dec_results[50];
 
 
 /* Callback for each buffer received */
@@ -91,18 +82,23 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
        URL : https://github.com/WestCoastDSP/CIC_Octave_Matlab
      */
     
-    /* Coefs with R=750, N=2, F0=0.90, L=32 */
-    // UPDATE: Test with Delay=2
+    /* Coefs with R=750, M=1, N=2, F0=0.92, L=54 */
     const static float zCoef[FIR_TAPS+1] = {
-         0.0088538954, -0.0097433988,  0.0109931573, -0.0107433733,
-         0.0061773304,  0.0056791851, -0.0268284015,  0.0570707291,
-        -0.0929713694,  0.1273298127, -0.1494057171,  0.1460517041,
-        -0.1037883070,  0.0118181139,  0.1337091153, -0.3219006390,
+        -0.0025719973,  0.0010118403,  0.0009110571, -0.0034940765,
+         0.0069713409, -0.0114242790,  0.0167023466, -0.0223683056,
+         0.0276808966, -0.0316243672,  0.0329894230, -0.0305042011,
+         0.0230074504, -0.0096499429, -0.0098950502,  0.0352349632,
+        -0.0650990428,  0.0972406918, -0.1284211497,  0.1544893973,
+        -0.1705667465,  0.1713383321, -0.1514501610,  0.1060148823,
+        -0.0312560926, -0.0745846391,  0.2096088743, -0.3638689868,
          0.5000000000,
-        -0.3219006390,  0.1337091153,  0.0118181139, -0.1037883070,
-         0.1460517041, -0.1494057171,  0.1273298127, -0.0929713694,
-         0.0570707291, -0.0268284015,  0.0056791851,  0.0061773304,
-        -0.0107433733,  0.0109931573, -0.0097433988,  0.0088538954
+        -0.3638689868,  0.2096088743, -0.0745846391, -0.0312560926,
+         0.1060148823, -0.1514501610,  0.1713383321, -0.1705667465,
+         0.1544893973, -0.1284211497,  0.0972406918, -0.0650990428,
+         0.0352349632, -0.0098950502, -0.0096499429,  0.0230074504,
+        -0.0305042011,  0.0329894230, -0.0316243672,  0.0276808966,
+        -0.0223683056,  0.0167023466, -0.0114242790,  0.0069713409,
+        -0.0034940765,  0.0009110571,  0.0010118403, -0.0025719973
     };
 
     /* FIR compensation filter buffers */
@@ -125,13 +121,13 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
     for (uint32_t i = 0; i < samples_count; i += 8) {
         sigIn[i  ] ^=  0x80;  // Unsigned to signed conversion using
         sigIn[i+1] ^=  0x80;  //   XOR as a binary mask to flip the first bit
-        tmp         =  (sigIn[i + 3] ^ 0x80);
-        sigIn[i+3]  =  (sigIn[i + 2] ^ 0x80);
+        tmp         =  (sigIn[i+3] ^ 0x80);  // CHECK -127 alt. possible issue ?
+        sigIn[i+3]  =  (sigIn[i+2] ^ 0x80);
         sigIn[i+2]  = -tmp;
-        sigIn[i+4]  = -(sigIn[i + 4] ^ 0x80);
-        sigIn[i+5]  = -(sigIn[i + 5] ^ 0x80);
-        tmp         =  (sigIn[i + 6] ^ 0x80);
-        sigIn[i+6]  =  (sigIn[i + 7] ^ 0x80);
+        sigIn[i+4]  = -(sigIn[i+4] ^ 0x80);
+        sigIn[i+5]  = -(sigIn[i+5] ^ 0x80);
+        tmp         =  (sigIn[i+6] ^ 0x80);
+        sigIn[i+6]  =  (sigIn[i+7] ^ 0x80);
         sigIn[i+7]  = -tmp;
     }
 
@@ -141,10 +137,9 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
              * Understanding cascaded integrator-comb filters
                http://www.embedded.com/design/configurable-systems/4006446/Understanding-cascaded-integrator-comb-filters
     */
-    for (int32_t i = 0; i < samples_count / 2; i++) {
+    for (int32_t i = 0; i < samples_count / 2; i++) {  // UPDATE: i+=2 & fix below
         /* Integrator stages (N=2) */
-        // EVAL: option to move sigIn in float here
-        Ix1 += (int32_t)sigIn[i * 2];
+        Ix1 += (int32_t)sigIn[i * 2];  // EVAL: option to move sigIn in float here
         Qx1 += (int32_t)sigIn[i * 2 + 1];
         Ix2 += Ix1;
         Qx2 += Qx1;
@@ -190,14 +185,9 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
 
         /* Save the result in the buffer */
         if (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
-            rx_state.iSamples[rx_state.bufferIndex][rx_state.iqIndex] = Isum / (8192.0 * DOWNSAMPLING);
-            rx_state.qSamples[rx_state.bufferIndex][rx_state.iqIndex] = Qsum / (8192.0 * DOWNSAMPLING);
+            rx_state.iSamples[rx_state.bufferIndex][rx_state.iqIndex] = Isum / (32768.0 * DOWNSAMPLING);
+            rx_state.qSamples[rx_state.bufferIndex][rx_state.iqIndex] = Qsum / (32768.0 * DOWNSAMPLING);
             rx_state.iqIndex++;
-        } else {
-            /* Switch to the other buffer and trigger the decoder */
-            rx_state.bufferIndex = (rx_state.bufferIndex + 1) % 2;
-            rx_state.iqIndex = 0;
-            safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
         }
     }
 }
@@ -228,11 +218,12 @@ static void *decoder(void *arg) {
         if (rx_state.exit_flag)
             break;  /* Abort case, final sig */
 
-        /* Date and time will be updated/overload during the search & decoding process
-           Make a simple copy
-        */
-        memcpy(dec_options.date, rx_options.date, sizeof(rx_options.date));
-        memcpy(dec_options.uttime, rx_options.uttime, sizeof(rx_options.uttime));
+        /* Get the date at the begining of the decoding process */
+        time_t rawtime;
+        time ( &rawtime );
+        struct tm *gtm = gmtime(&rawtime);
+        snprintf(dec_options.date, sizeof(dec_options.date), "%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
+        snprintf(dec_options.uttime, sizeof(dec_options.uttime), "%02d%02d", gtm->tm_hour, gtm->tm_min);
 
         /* Select the previous transmission */
         uint32_t prevBuffer = (rx_state.bufferIndex + 1) % 2;
@@ -253,7 +244,7 @@ static void *decoder(void *arg) {
 }
 
 
-/* Reset flow control variable & decimation variables */
+/* Double buffer management */
 void initSampleStorage() {
     rx_state.bufferIndex = 0;
     rx_state.iqIndex     = 0;
@@ -807,9 +798,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ERROR: Failed to set sample rate\n");
         rtlsdr_close(rtl_device);
         return EXIT_FAILURE;
-    } else {
-        uint32_t getsampl = rtlsdr_get_sample_rate(rtl_device);
-        fprintf(stdout, "Sampling rate = %d\n", getsampl);
     }
 
     rtl_result = rtlsdr_set_tuner_gain_mode(rtl_device, 1);
@@ -858,7 +846,8 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    /* Time alignment */
+
+    /* Time alignment & info */
     struct timeval lTime;
     time_t rawtime;
     time ( &rawtime );
@@ -878,6 +867,8 @@ int main(int argc, char **argv) {
     else
         printf("  Gain         : %d dB\n", rx_options.gain / 10);
 
+
+    /* Wait for timing alignment */
     gettimeofday(&lTime, NULL);
     uint32_t sec   = lTime.tv_sec % 15;
     uint32_t usec  = sec * 1000000 + lTime.tv_usec;
@@ -905,21 +896,17 @@ int main(int argc, char **argv) {
     while (!rx_state.exit_flag && !(rx_options.maxloop && (nLoop >= rx_options.maxloop))) {
         /* Wait for time Sync on 15 secs */
         gettimeofday(&lTime, NULL);
-        uint32_t sec   = lTime.tv_sec % 15;
-        uint32_t usec  = sec * 1000000 + lTime.tv_usec;
-        uint32_t uwait = 15000000 - usec;
+        sec   = lTime.tv_sec % 15;
+        usec  = sec * 1000000 + lTime.tv_usec;
+        uwait = 15000000 - usec;
         printf("DBG -- Time sync, a new record will start in: %d sec\n", uwait / 1000000);
         usleep(uwait);
 
-        /* Override the sample in progress, to keep everything aligned */
+        /* Switch to the other buffer and trigger the decoder */
+        rx_state.bufferIndex = (rx_state.bufferIndex + 1) % 2;
         rx_state.iqIndex = 0;
+        safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
         printf("DBG -- Sampling just started!\n");
-
-        /* Use the Store the date at the begin of the frame */
-        time(&rawtime);
-        gtm = gmtime(&rawtime);
-        snprintf(rx_options.date, sizeof(rx_options.date), "%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
-        snprintf(rx_options.uttime, sizeof(rx_options.uttime), "%02d%02d", gtm->tm_hour, gtm->tm_min);
 
         nLoop++;
     }
@@ -933,8 +920,6 @@ int main(int argc, char **argv) {
     /* Free FFTW buffers */
     freeFFTW();
 
-    printf("Bye!\n");
-
     /* Wait the thread join (send a signal before to terminate the job) */
     safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
     pthread_join(decThread.thread, NULL);
@@ -943,7 +928,12 @@ int main(int argc, char **argv) {
     /* Destroy the lock/cond/thread */
     pthread_cond_destroy(&decThread.ready_cond);
     pthread_mutex_destroy(&decThread.ready_mutex);
-    pthread_exit(NULL);
+    
+    // UPDATE required ??
+    // pthread_exit(decThread.thread);
+    // pthread_exit(rxThread);
+
+    printf("Bye!\n");
 
     return EXIT_SUCCESS;
 }
