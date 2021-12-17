@@ -618,7 +618,7 @@ int main(int argc, char **argv) {
     if (argc <= 1)
         usage();
 
-    while ((opt = getopt(argc, argv, "f:c:l:g:ao:p:u:dn:i:tw:r:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:c:l:g:ao:p:u:d:n:i:tw:r:")) != -1) {
         switch (opt) {
             case 'f':  // Frequency
                 if (!strcasecmp(optarg, "LF")) {
@@ -686,7 +686,7 @@ int main(int argc, char **argv) {
                 rx_options.upconverter = (uint32_t)atofs(optarg);
                 break;
             case 'd':  // Direct Sampling
-                rx_options.directsampling = 1;
+                rx_options.directsampling = (uint32_t)atofs(optarg);
                 break;
             case 'n':  // Stop after n iterations
                 rx_options.maxloop = (uint32_t)atofs(optarg);
