@@ -382,7 +382,7 @@ void postSpots(uint32_t n_results) {
         randomId = rand();
     }
 
-    /* Compute the bloc sizes */
+    /* Compute the block sizes */
     uint32_t headerSize     = 16;
     uint32_t rxInfoDataSize = 12 + strlen(rxCall) + strlen(rxGrid) + strlen(rxApp) + strlen(rxAnt);
     uint32_t rxPaddingSize  = ((4 - (rxInfoDataSize % 4)) % 4);
@@ -390,7 +390,7 @@ void postSpots(uint32_t n_results) {
     uint32_t txPaddingSize  = ((4 - (txInfoDataSize % 4)) % 4);
     uint32_t fullBlockSize  = headerSize + sizeof(rxInfoDescriptor) + sizeof(txInfoDescriptor) + rxInfoDataSize + rxPaddingSize + txInfoDataSize + txPaddingSize;
 
-    /* Header bloc */
+    /* Header block */
     char headerData[headerSize];
     *(uint8_t  *)&headerData[0]  = (uint8_t)0x00;
     *(uint8_t  *)&headerData[1]  = (uint8_t)0x0A;
@@ -399,7 +399,7 @@ void postSpots(uint32_t n_results) {
     *(uint32_t *)&headerData[8]  = SwapEndian32(sequenceNumber);
     *(uint32_t *)&headerData[12] = SwapEndian32(randomId);
 
-    /* Receiver information bloc */
+    /* Receiver information block */
     char rxInfoData[rxInfoDataSize + rxPaddingSize];
     uint32_t rxPtr = 0;
     *(uint8_t  *)&rxInfoData[0] = (uint8_t)0x50;                    rxPtr += 1;
@@ -422,7 +422,7 @@ void postSpots(uint32_t n_results) {
          *(uint8_t *)&rxInfoData[rxPtr] = (uint8_t)0;               rxPtr += 1;
     }
 
-    /* Receiver information bloc */
+    /* Receiver information block */
     char txInfoData[txInfoDataSize + txPaddingSize];
     uint32_t txPtr = 0;
     *(uint8_t  *)&txInfoData[txPtr] = (uint8_t)0x50;                 txPtr += 1;
@@ -458,7 +458,7 @@ void postSpots(uint32_t n_results) {
     memcpy(&fullBlockData[ptrBlock], rxInfoData,       rxInfoDataSize);             ptrBlock += rxInfoDataSize;
     memcpy(&fullBlockData[ptrBlock], txInfoData,       txInfoDataSize);             ptrBlock += txInfoDataSize;
 
-    /* DEBUG -- Print the bloc */
+    /* DEBUG -- Print the block */
     for (int i = 0; i < headerSize; i++) {
         printf("%02X", *(uint8_t *)&headerData[i]);
     }
@@ -490,7 +490,7 @@ void postSpots(uint32_t n_results) {
     }
     printf("\n");
 
-    /* Send the bloc using UDP */
+    /* Send the block using UDP */
     char hostname[] = "report.pskreporter.info";
     //char service[]  = "4739";
     char service[]  = "14739";
