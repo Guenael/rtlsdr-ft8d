@@ -4,11 +4,10 @@
 
 ![rtlsdr-wsprd](art/rtlsdr-ft8d-web.jpg)
 
-![Project Status](https://img.shields.io/badge/status-WIP-red)
+![Project Status](https://img.shields.io/badge/status-OK-green)
 ![Workflow Status](https://img.shields.io/github/workflow/status/Guenael/rtlsdr-ft8d/CI)
 ![Last commit](https://img.shields.io/github/last-commit/Guenael/rtlsdr-ft8d)
 ![Commit activity](https://img.shields.io/github/commit-activity/m/Guenael/rtlsdr-ft8d)
-![Repo stars](https://img.shields.io/github/stars/Guenael/rtlsdr-ft8d?style=social)
 
 ## TL;DR
 
@@ -57,9 +56,9 @@ This application written in C does:
 ## Installation
 
   1. Install a Linux compatible distro on your device.
-     
+
      For Raspberry Pi, you can download official images [here](https://www.raspberrypi.com/software/operating-systems/).
-  
+
   2. It's a good practice to update your OS. With Pi OS, run this command as usual:
      ```bash
      sudo apt-get update && sudo apt-get upgrade
@@ -82,7 +81,7 @@ This application written in C does:
      cd ../..
      ```
   Note: You may have to re-plug you dongle if it was already connected, or play with `udev` if not automatically detected.
-  
+
   5. Clone this repository:
      ```bash
      git clone https://github.com/Guenael/rtlsdr-ft8d
