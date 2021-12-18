@@ -88,10 +88,13 @@ struct receiver_state {
     float    qSamples[2][SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];
 
     /* Sample index */
-    uint32_t iqIndex;
+    uint32_t iqIndex[2];
 
     /* Buffer selected (0 or 1) */
     uint32_t bufferIndex;
+
+    /* Time at the beginning of the frame to decode */
+    struct tm *gtm;
 };
 
 struct receiver_options {
@@ -109,8 +112,6 @@ struct receiver_options {
     bool     writefile;
     bool     readfile;
     char     filename[33];
-    // char     date[7];
-    // char     uttime[5];
 };
 
 
@@ -119,8 +120,8 @@ struct decoder_options {
     uint32_t freq;         // Dial frequency
     char     rcall[13];    // Callsign of the RX station
     char     rloc[7];      // Locator of the RX station
-    char     date[7];      // Date & time of the processes samples
-    char     uttime[5];    //  ''
+    // char     date[7];      // Date & time of the processes samples
+    // char     uttime[5];    //  ''
 };
 
 struct decoder_results {
@@ -148,6 +149,6 @@ int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename);
 int32_t writeRawIQfile(float *iSamples, float *qSamples, char *filename);
 void decodeRecordedFile(char *filename);
 float whiteGaussianNoise(float factor);
-int32_t ft8DecoderSelfTest();
+int32_t decoderSelfTest();
 void usage(void);
 void ft8_subsystem(float *iSamples, float *qSamples, uint32_t samples_len, struct decoder_results *decodes, int32_t *n_results);

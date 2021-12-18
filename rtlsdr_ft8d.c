@@ -122,7 +122,7 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
     for (uint32_t i = 0; i < samples_count; i += 8) {
         sigIn[i  ] ^=  0x80;  // Unsigned to signed conversion using
         sigIn[i+1] ^=  0x80;  //   XOR as a binary mask to flip the first bit
-        tmp         =  (sigIn[i+3] ^ 0x80);  // CHECK -127 alt. possible issue ?
+        tmp         =  (sigIn[i+3] ^ 0x80);  // CHECK -127 alt. speed
         sigIn[i+3]  =  (sigIn[i+2] ^ 0x80);
         sigIn[i+2]  = -tmp;
         sigIn[i+4]  = -(sigIn[i+4] ^ 0x80);
@@ -185,10 +185,11 @@ static void rtlsdr_callback(unsigned char *samples, uint32_t samples_count, void
         Qsum += firQ[FIR_TAPS-1] * zCoef[FIR_TAPS];
 
         /* Save the result in the buffer */
-        if (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
-            rx_state.iSamples[rx_state.bufferIndex][rx_state.iqIndex] = Isum / (32768.0 * DOWNSAMPLING);
-            rx_state.qSamples[rx_state.bufferIndex][rx_state.iqIndex] = Qsum / (32768.0 * DOWNSAMPLING);
-            rx_state.iqIndex++;
+        uint32_t idx = rx_state.bufferIndex;
+        if (rx_state.iqIndex[idx] < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
+            rx_state.iSamples[idx][rx_state.iqIndex[idx]] = Isum / (32768.0 * DOWNSAMPLING);
+            rx_state.qSamples[idx][rx_state.iqIndex[idx]] = Qsum / (32768.0 * DOWNSAMPLING);
+            rx_state.iqIndex[idx]++;
         }
     }
 }
@@ -219,18 +220,21 @@ static void *decoder(void *arg) {
         if (rx_state.exit_flag)
             break;  /* Abort case, final sig */
 
-        /* Get the date at the beginning of the decoding process */
-        time_t rawtime;
-        time ( &rawtime );
-        struct tm *gtm = gmtime(&rawtime);
-        snprintf(dec_options.date, sizeof(dec_options.date), "%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
-        snprintf(dec_options.uttime, sizeof(dec_options.uttime), "%02d%02d", gtm->tm_hour, gtm->tm_min);
-
-        /* Select the previous transmission */
+        /* Select the previous transmission / other buffer */
         uint32_t prevBuffer = (rx_state.bufferIndex + 1) % 2;
 
+        if (rx_state.iqIndex[prevBuffer] < ( (SIGNAL_LENGHT - 3) * SIGNAL_SAMPLE_RATE ) )
+            continue;  /* Partial buffer during the first RX, skip it! */
+
+        /* Get the date at the beginning last recording session
+           with 1 second margin added, just to be sure to be on 15 alignment
+        */
+        time_t unixtime;
+        time ( &unixtime );
+        unixtime = unixtime - 15 + 1;
+        rx_state.gtm = gmtime( &unixtime );
+
         /* Search & decode the signal */
-        printf("DBG -- Decoding block\n");
         ft8_subsystem(rx_state.iSamples[prevBuffer],
                       rx_state.qSamples[prevBuffer],
                       SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE,
@@ -248,7 +252,8 @@ static void *decoder(void *arg) {
 /* Double buffer management */
 void initSampleStorage() {
     rx_state.bufferIndex = 0;
-    rx_state.iqIndex     = 0;
+    rx_state.iqIndex[0]  = 0;
+    rx_state.iqIndex[1]  = 0;
 }
 
 
@@ -368,7 +373,7 @@ void postSpots(uint32_t n_results) {
     char txGrid[] = "JN38AB";
     char txMode[] = "FT8";
     uint32_t txFreq = 144174050;
-    int32_t txSnr  = 10;   // !! fix integer, not uint
+    int32_t txSnr   = 10;
 
     uint32_t sequenceNumber = 1;
 
@@ -395,7 +400,7 @@ void postSpots(uint32_t n_results) {
     *(uint8_t  *)&headerData[0]  = (uint8_t)0x00;
     *(uint8_t  *)&headerData[1]  = (uint8_t)0x0A;
     *(uint16_t *)&headerData[2]  = SwapEndian16(fullBlockSize);
-    *(uint32_t *)&headerData[4]  = SwapEndian32(unixtime); // ISSUE: reversed ??
+    *(uint32_t *)&headerData[4]  = SwapEndian32(unixtime);
     *(uint32_t *)&headerData[8]  = SwapEndian32(sequenceNumber);
     *(uint32_t *)&headerData[12] = SwapEndian32(randomId);
 
@@ -537,8 +542,18 @@ void postSpots(uint32_t n_results) {
 
 
 void printSpots(uint32_t n_results) {
-    printf("  Score     Freq       Call    Loc\n");
+    if (n_results == 0) {
+        printf("No spot %04d-%02d-%02d %02d:%02dz\n",
+               rx_state.gtm->tm_year + 1900,
+               rx_state.gtm->tm_mon + 1,
+               rx_state.gtm->tm_mday,
+               rx_state.gtm->tm_hour,
+               rx_state.gtm->tm_min);
 
+        return;
+    }
+
+    printf("  Score     Freq       Call    Loc\n");
     for (uint32_t i = 0; i < n_results; i++) {
         printf("     %2d %8d %10s %6s\n",
                dec_results[i].snr,
@@ -733,7 +748,7 @@ float whiteGaussianNoise(float factor) {
 }
 
 
-int32_t ft8DecoderSelfTest() {
+int32_t decoderSelfTest() {
     static float iSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
     static float qSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
     static uint32_t samples_len = SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE;
@@ -941,7 +956,7 @@ int main(int argc, char **argv) {
     }
 
     if (rx_options.selftest == true) {
-        if (ft8DecoderSelfTest()) {
+        if (decoderSelfTest()) {
             fprintf(stdout, "Self-test SUCCESS!\n");
             exit(0);
         }
@@ -1084,7 +1099,7 @@ int main(int argc, char **argv) {
 
 
     /* Print used parameter */
-    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.2alpha\n",
+    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.3.2\n",
            gtm->tm_year + 1900, gtm->tm_mon + 1, gtm->tm_mday, gtm->tm_hour, gtm->tm_min);
     printf("  Callsign     : %s\n", dec_options.rcall);
     printf("  Locator      : %s\n", dec_options.rloc);
@@ -1128,14 +1143,12 @@ int main(int argc, char **argv) {
         sec   = lTime.tv_sec % 15;
         usec  = sec * 1000000 + lTime.tv_usec;
         uwait = 15000000 - usec;
-        printf("DBG -- Time sync, a new record will start in: %d sec\n", uwait / 1000000);
         usleep(uwait);
 
         /* Switch to the other buffer and trigger the decoder */
         rx_state.bufferIndex = (rx_state.bufferIndex + 1) % 2;
-        rx_state.iqIndex = 0;
+        rx_state.iqIndex[rx_state.bufferIndex] = 0;
         safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
-        printf("DBG -- Sampling just started!\n");
 
         nLoop++;
     }
@@ -1158,10 +1171,6 @@ int main(int argc, char **argv) {
     pthread_cond_destroy(&decThread.ready_cond);
     pthread_mutex_destroy(&decThread.ready_mutex);
     
-    // UPDATE required ??
-    // pthread_exit(decThread.thread);
-    // pthread_exit(rxThread);
-
     printf("Bye!\n");
 
     return EXIT_SUCCESS;
