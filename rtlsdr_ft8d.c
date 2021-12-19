@@ -372,7 +372,7 @@ void postSpots(uint32_t n_results) {
     char rxCall[] = "VA2GKA";
     char rxGrid[] = "FN38FM";
     char rxAnt[]  = "NC";
-    char rxApp[]  = "rtlsdr-ft8d_v0.3.1";
+    char rxApp[]  = "rtlsdr-ft8d_v0.3.3";
 
     char txCall[] = "F5LEN";
     char txGrid[] = "JN38AB";
@@ -1149,7 +1149,7 @@ int main(int argc, char **argv) {
 
 
     /* Print used parameter */
-    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.3.2\n",
+    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.3.3\n",
            gtm->tm_year + 1900, gtm->tm_mon + 1, gtm->tm_mday, gtm->tm_hour, gtm->tm_min);
     printf("  Callsign     : %s\n", dec_options.rcall);
     printf("  Locator      : %s\n", dec_options.rloc);
