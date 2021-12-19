@@ -68,7 +68,7 @@ This application written in C does:
      ```bash
      sudo apt-get update && sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev libcurl4-gnutls-dev ntp git
      ```
- 
+
   4. Install `rtl-sdr` library manually. **Do not use the `librtlsdr-dev` package on Raspberry PiOS**. There is a know bug with this lib and rtlsdr_wsprd will not be able to get enough samples (don't decode anything & 100% CPU pattern).
      ```bash
      git clone https://github.com/steve-m/librtlsdr
@@ -94,11 +94,31 @@ This application written in C does:
      make
      sudo make install
      ```
-  
+
   7. Finally, start the application with the right parameters/options for you (frequency, callsign, locator etc... Fake example below):
      ```bash
      rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29
      ```
+
+## Container Image
+
+As an alterative to the above steps, a pre-built container image containing rtlsdr-ft8d is available for use with [Docker](https://www.docker.com/) or [Podman](https://podman.io/).
+
+The RTL DVB kernel modules must first be blacklisted on the host running the container. RTL-SDR itself is not required on the host running the container. This can be permanently accomplished using the following commands:
+
+```bash
+echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/blacklist-dvb_usb_rtl28xxu.conf
+sudo modprobe -r dvb_usb_rtl28xxu
+```
+
+If the `modprobe -r` command errors, a reboot is recommended to unload the module.
+
+You can then start the container with the right parameters/options for you (frequency, callsign, locator etc... Fake example below):
+
+```bash
+docker run --rm -it --pull=always --device=/dev/bus/usb ghcr.io/guenael/rtlsdr-ft8d:latest -f 2m -c A1XYZ -l AB12cd -g 29
+```
+
 
 ## Tips (for your Raspberry Pi and SDR dongles)
 
