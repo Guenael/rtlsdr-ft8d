@@ -1286,11 +1286,12 @@ void ft8_subsystem(float *iSamples,
     /* Find top candidates by Costas sync score and localize them in time and frequency */
     candidate_t candidate_list[K_MAX_CANDIDATES];
     waterfall_t power = {
-        .num_blocks = NUM_BLOCKS,
-        .num_bins = NUM_BIN,
-        .time_osr = K_TIME_OSR,
-        .freq_osr = K_FREQ_OSR,
-        .mag = mag_power
+        .num_blocks   = NUM_BLOCKS,
+        .num_bins     = NUM_BIN,
+        .time_osr     = K_TIME_OSR,
+        .freq_osr     = K_FREQ_OSR,
+        .mag          = mag_power,
+        .block_stride = (K_TIME_OSR * K_FREQ_OSR * NUM_BIN)
     };
     int num_candidates = ft8_find_sync(&power, K_MAX_CANDIDATES, candidate_list, K_MIN_SCORE);
 
