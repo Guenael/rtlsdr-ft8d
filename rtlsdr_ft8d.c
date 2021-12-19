@@ -30,6 +30,7 @@
 #include <fftw3.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <curl/curl.h>
 
 #include "./rtlsdr_ft8d.h"
 
@@ -323,7 +324,11 @@ inline uint32_t SwapEndian32(uint32_t val) {
 void postSpots(uint32_t n_results) {
     return;
 
-    // WORK IN PROGRESS
+    /* WORK IN PROGRESS
+    https://pskreporter.info/pskdev.html
+    https://pskreporter.info/cgi-bin/psk-analysis.pl
+    https://pskreporter.info/pskmap.html
+    */
 
     const unsigned char rxInfoDescriptor[] = {  // (RX = RTLsdr owner)
         0x00, 0x03,                          // Options Template Set ID
@@ -538,6 +543,51 @@ void postSpots(uint32_t n_results) {
     close(sockfd);
 
     printf("DBG -- Packet sent\n");
+}
+
+
+/* Report on a WebCluster */
+void webClusterSpots(uint32_t n_results) {
+    /* No spot to report, simply skip */
+    if (n_results == 0) {
+        return;
+    }
+
+    CURL *curl;
+    CURLcode res;
+    struct curl_httppost* post = NULL;
+    struct curl_httppost* last = NULL;
+
+    char myCall[16];
+    char dxCall[12];
+    char dxFreq[10];
+    char info[100];
+
+    for (uint32_t i = 0; i < n_results; i++) {
+        snprintf(myCall, sizeof(myCall), "%s", dec_options.rcall);
+        snprintf(dxFreq, sizeof(dxFreq), "%8f", (float)dec_results[i].freq / 1000.0f);
+        snprintf(dxCall, sizeof(dxCall), "%s", dec_results[i].call);
+        snprintf(info, sizeof(info), "M2M FT8 [%s - %s]", dec_options.rloc, dec_results[i].loc);
+
+        curl_global_init(CURL_GLOBAL_ALL);
+        curl_formadd(&post, &last, CURLFORM_COPYNAME, "_mycall", CURLFORM_COPYCONTENTS, myCall, CURLFORM_END);
+        curl_formadd(&post, &last, CURLFORM_COPYNAME, "_dxcall", CURLFORM_COPYCONTENTS, dxCall, CURLFORM_END);
+        curl_formadd(&post, &last, CURLFORM_COPYNAME, "_freq", CURLFORM_COPYCONTENTS, dxFreq, CURLFORM_END);
+        curl_formadd(&post, &last, CURLFORM_COPYNAME, "_info", CURLFORM_COPYCONTENTS, info, CURLFORM_END);
+
+        curl = curl_easy_init();
+        if (curl) {
+            curl_easy_setopt(curl, CURLOPT_URL, "http://cluster.localhost/sends.php");
+            curl_easy_setopt(curl, CURLOPT_HTTPPOST, post);
+            res = curl_easy_perform(curl);
+
+            if (res != CURLE_OK)
+                fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+            curl_easy_cleanup(curl);
+            curl_formfree(post);
+        }
+    }
 }
 
 
