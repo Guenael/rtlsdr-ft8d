@@ -810,7 +810,7 @@ int32_t decoderSelfTest() {
      * FSK tones: 3140652000000001005477547106035036373140652547441342116056460065174427143140652
      */
     const char message[] = "CQ K1JT FN20QI";
-    uint8_t packed[FT8_LDPC_K_BYTES];
+    uint8_t packed[FTX_LDPC_K_BYTES];
 
     if (pack77(message, packed) < 0){
         printf("Cannot parse message!\n");
@@ -1291,8 +1291,10 @@ void ft8_subsystem(float *iSamples,
         .time_osr     = K_TIME_OSR,
         .freq_osr     = K_FREQ_OSR,
         .mag          = mag_power,
-        .block_stride = (K_TIME_OSR * K_FREQ_OSR * NUM_BIN)
+        .block_stride = (K_TIME_OSR * K_FREQ_OSR * NUM_BIN),
+        .protocol     = PROTO_FT8
     };
+
     int num_candidates = ft8_find_sync(&power, K_MAX_CANDIDATES, candidate_list, K_MIN_SCORE);
 
     // Hash table for decoded messages (to check for duplicates)
