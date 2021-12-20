@@ -866,7 +866,8 @@ void usage(void) {
             "Use:\rtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
             "\t-f dial frequency [(,k,M) Hz] or band string\n"
             "\t   If band string is used, the default dial frequency will used.\n"
-            "\t   Bands: LF MF 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
+            "\t   Bands: 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
+            "\t   (Check the band plan according your IARU Region)\n"
             "\t-c your callsign (12 chars max)\n"
             "\t-l your locator grid (6 chars max)\n"
             "Receiver extra options:\n"
@@ -915,42 +916,38 @@ int main(int argc, char **argv) {
     while ((opt = getopt(argc, argv, "f:c:l:g:ao:p:u:d:n:i:tw:r:")) != -1) {
         switch (opt) {
             case 'f':  // Frequency
-                if (!strcasecmp(optarg, "LF")) {
-                    rx_options.dialfreq = 136000;
-                } else if (!strcasecmp(optarg, "MF")) {
-                    rx_options.dialfreq = 474200;
-                } else if (!strcasecmp(optarg, "160m")) {
-                    rx_options.dialfreq = 1836600;
+                if (!strcasecmp(optarg, "160m")) {
+                    rx_options.dialfreq = 1840000;
                 } else if (!strcasecmp(optarg, "80m")) {
-                    rx_options.dialfreq = 3592600;
+                    rx_options.dialfreq = 3573000;
                 } else if (!strcasecmp(optarg, "60m")) {
-                    rx_options.dialfreq = 5287200;
+                    rx_options.dialfreq = 5357000;
                 } else if (!strcasecmp(optarg, "40m")) {
-                    rx_options.dialfreq = 7038600;
+                    rx_options.dialfreq = 7074000;
                 } else if (!strcasecmp(optarg, "30m")) {
-                    rx_options.dialfreq = 10138700;
+                    rx_options.dialfreq = 10136000;
                 } else if (!strcasecmp(optarg, "20m")) {
-                    rx_options.dialfreq = 14095600;
+                    rx_options.dialfreq = 14074000;
                 } else if (!strcasecmp(optarg, "17m")) {
-                    rx_options.dialfreq = 18104600;
+                    rx_options.dialfreq = 18100000;
                 } else if (!strcasecmp(optarg, "15m")) {
-                    rx_options.dialfreq = 21094600;
+                    rx_options.dialfreq = 21074000;
                 } else if (!strcasecmp(optarg, "12m")) {
-                    rx_options.dialfreq = 24924600;
+                    rx_options.dialfreq = 24915000;
                 } else if (!strcasecmp(optarg, "10m")) {
-                    rx_options.dialfreq = 28124600;
+                    rx_options.dialfreq = 28074000;
                 } else if (!strcasecmp(optarg, "6m")) {
-                    rx_options.dialfreq = 50293000;
+                    rx_options.dialfreq = 50313000;
                 } else if (!strcasecmp(optarg, "4m")) {
-                    rx_options.dialfreq = 70091000;
+                    rx_options.dialfreq = 70100000;
                 } else if (!strcasecmp(optarg, "2m")) {
-                    rx_options.dialfreq = 144489000;
+                    rx_options.dialfreq = 144174000;
                 } else if (!strcasecmp(optarg, "1m25")) {
-                    rx_options.dialfreq = 222280000;
+                    rx_options.dialfreq = 222065000;
                 } else if (!strcasecmp(optarg, "70cm")) {
-                    rx_options.dialfreq = 432300000;
+                    rx_options.dialfreq = 432065000;
                 } else if (!strcasecmp(optarg, "23cm")) {
-                    rx_options.dialfreq = 1296500000;
+                    rx_options.dialfreq = 1296174000;
                 } else {
                     rx_options.dialfreq = (uint32_t)atofs(optarg);
                 }
@@ -1126,7 +1123,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    rtl_result = rtlsdr_set_center_freq(rtl_device, rx_options.realfreq + FS4_RATE);
+    rtl_result = rtlsdr_set_center_freq(rtl_device, rx_options.realfreq + FS4_RATE + 1500);
     if (rtl_result < 0) {
         fprintf(stderr, "ERROR: Failed to set frequency\n");
         rtlsdr_close(rtl_device);
