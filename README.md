@@ -1,6 +1,8 @@
 # rtlsdr-ft8d -- FT8 daemon for RTL receivers
 
-**WIP -- Need help for testing this project!!**
+**WORK IN PROGRESS -- Need help for testing this project**
+- **Automated reporting not yet working**
+- **Possible +1500 Hz shift from the dial frequency**
 
 ![rtlsdr-wsprd](art/rtlsdr-ft8d-web.jpg)
 
