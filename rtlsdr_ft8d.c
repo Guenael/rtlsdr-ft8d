@@ -330,55 +330,58 @@ void postSpots(uint32_t n_results) {
     https://pskreporter.info/pskmap.html
     */
 
-    const unsigned char rxInfoDescriptor[] = {  // (RX = RTLsdr owner)
-        0x00, 0x03,                          // Options Template Set ID
-        0x00, 0x2C,                          // Length
-        0x50, 0xE2,                          // Link ID
-        0x00, 0x04,                          // Field Count
-        0x00, 0x00,                          // Scope Field Count
-        0x80, 0x02,                          // Receiver Callsign ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x04,                          // Receiver Locator ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x08,                          // Receiver Decoder Software ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x09,                          // Receiver Antenna ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x00, 0x00                           // Padding
+    const unsigned char rxDescriptor[] = {
+        0x00, 0x03,              // Template Set ID
+        0x00, 0x2C,              // Length
+        0x50, 0xE2,              // Link ID
+        0x00, 0x04,              // Field Count
+        0x00, 0x00,              // Scope Field Count
+        0x80, 0x02,              // Receiver Callsign ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x04,              // Receiver Locator ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x08,              // Receiver Decoder Software ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x09,              // Receiver Antenna ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x00, 0x00               // Padding               // wspjt no padding here
     };
 
-    const unsigned char txInfoDescriptor[] = {  // (TX = Signal received)
-        0x00, 0x02,                          // Options Template Set ID
-        0x00, 0x3C,                          // Length
-        0x50, 0xE3,                          // Link ID
-        0x00, 0x07,                          // Field Count
-        0x80, 0x01,                          // Sender Callsign ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x05,                          // Sender Frequency ID
-        0x00, 0x04, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (4) length & enterprise number
-        0x80, 0x06,                          // Sender SNR ID
-        0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
-        0x80, 0x0A,                          // Sender Mode ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x03,                          // Sender Locator ID
-        0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F,  // Variable field length & enterprise number
-        0x80, 0x0B,                          // Information Source ID
-        0x00, 0x01, 0x00, 0x00, 0x76, 0x8F,  // Fixed field (1) length & enterprise number
-        0x00, 0x96,                          // DateTimeSeconds ID
-        0x00, 0x04                           // Field Length
+    const unsigned char txDescriptor[] = {
+        0x00, 0x02,              // Template Set ID
+        0x00, 0x3C,              // Length
+        0x50, 0xE3,              // Link ID
+        0x00, 0x07,              // Field Count
+        0x80, 0x01,              // Sender Callsign ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x05,              // Sender Frequency ID
+        0x00, 0x04,              // Fixed length (4)
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x06,              // Sender SNR ID
+        0x00, 0x01,              // Fixed length (1)
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x0A,              // Sender Mode ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x03,              // Sender Locator ID
+        0xFF, 0xFF,              // Variable field length
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x80, 0x0B,              // Information Source ID
+        0x00, 0x01,              // Fixed length (1)
+        0x00, 0x00, 0x76, 0x8F,  // Enterprise number
+        0x00, 0x96,              // DateTimeSeconds ID
+        0x00, 0x04               // Field Length
     };
 
-    // DEBUG/TEST with https://pskreporter.info/cgi-bin/psk-analysis.pl
-    char rxCall[] = "VA2GKA";
-    char rxGrid[] = "FN38FM";
-    char rxAnt[]  = "NC";
-    char rxApp[]  = "rtlsdr-ft8d_v0.3.4";
-
-    char txCall[] = "F5LEN";
-    char txGrid[] = "JN38AB";
-    char txMode[] = "FT8";
-    uint32_t txFreq = 144174050;
-    int32_t txSnr   = 10;
+    const char rxAnt[]  = "NC";  // TODO static for now
+    const char rxApp[]  = "rtlsdr-ft8d_v0.3.4";
+    const char txMode[] = "FT8";
+    int32_t txSnr       = 10;    // TODO update with score first
 
     uint32_t sequenceNumber = 1;
 
@@ -392,81 +395,127 @@ void postSpots(uint32_t n_results) {
         randomId = rand();
     }
 
-    /* Compute the block sizes */
-    uint32_t headerSize     = 16;
-    uint32_t rxInfoDataSize = 12 + strlen(rxCall) + strlen(rxGrid) + strlen(rxApp) + strlen(rxAnt);
-    uint32_t rxPaddingSize  = ((4 - (rxInfoDataSize % 4)) % 4);
-    uint32_t txInfoDataSize = 20 + strlen(txCall) + strlen(txMode) + strlen(txGrid);
-    uint32_t txPaddingSize  = ((4 - (txInfoDataSize % 4)) % 4);
-    uint32_t fullBlockSize  = headerSize + sizeof(rxInfoDescriptor) + sizeof(txInfoDescriptor) + rxInfoDataSize + rxPaddingSize + txInfoDataSize + txPaddingSize;
-
     /* Header block */
+    uint32_t headerSize     = 16;
     char headerData[headerSize];
-    *(uint8_t  *)&headerData[0]  = (uint8_t)0x00;
-    *(uint8_t  *)&headerData[1]  = (uint8_t)0x0A;
-    *(uint16_t *)&headerData[2]  = SwapEndian16(fullBlockSize);
-    *(uint32_t *)&headerData[4]  = SwapEndian32(unixtime);
-    *(uint32_t *)&headerData[8]  = SwapEndian32(sequenceNumber);
-    *(uint32_t *)&headerData[12] = SwapEndian32(randomId);
+    uint32_t hPtr = 0;
+    *(uint16_t *)&headerData[hPtr] = SwapEndian16(0x000A);          
+    hPtr += 2;
+    hPtr += 2;  // Skip the size bloc, adjust later
+    *(uint32_t *)&headerData[hPtr] = SwapEndian32(unixtime);
+    hPtr += 4;
+    *(uint32_t *)&headerData[hPtr] = SwapEndian32(sequenceNumber);
+    hPtr += 4;
+    *(uint32_t *)&headerData[hPtr] = SwapEndian32(randomId);
+    hPtr += 4;
+
 
     /* Receiver information block */
-    char rxInfoData[rxInfoDataSize + rxPaddingSize];
+    char rxInfoData[512];  // TODO: buffer overflow issue... TESTING for now!
     uint32_t rxPtr = 0;
-    *(uint8_t  *)&rxInfoData[0] = (uint8_t)0x50;                    rxPtr += 1;
-    *(uint8_t  *)&rxInfoData[1] = (uint8_t)0xE2;                    rxPtr += 1;
-    *(uint16_t *)&rxInfoData[2] = SwapEndian16(rxInfoDataSize + rxPaddingSize); rxPtr += 2;
+
+    /* Header & length */
+    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(0x50E2);
+    rxPtr += 2;  // Skip the size bloc, adjust later
+    
     /* Receiver Callsign */
-    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(rxCall)); rxPtr += 2;
-    strncpy((char *)&rxInfoData[rxPtr], rxCall, strlen(rxCall));    rxPtr += strlen(rxCall);
+    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(dec_options.rcall));
+    rxPtr += 2;
+    strncpy((char *)&rxInfoData[rxPtr], dec_options.rcall, strlen(dec_options.rcall));
+    rxPtr += strlen(dec_options.rcall);
+
     /* Receiver Locator */
-    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(rxGrid)); rxPtr += 2;
-    strncpy((char *)&rxInfoData[rxPtr], rxGrid, strlen(rxGrid));    rxPtr += strlen(rxGrid);
+    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(dec_options.rloc));
+    rxPtr += 2;
+    strncpy((char *)&rxInfoData[rxPtr], dec_options.rloc, strlen(dec_options.rloc));
+    rxPtr += strlen(dec_options.rloc);
+
     /* Application used by RX */
-    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(rxApp));  rxPtr += 2;
-    strncpy((char *)&rxInfoData[rxPtr], rxApp, strlen(rxApp));      rxPtr += strlen(rxApp);
+    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(rxApp));
+    rxPtr += 2;
+    strncpy((char *)&rxInfoData[rxPtr], rxApp, strlen(rxApp));
+    rxPtr += strlen(rxApp);
+
     /* Antenna used by RX */
-    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(rxAnt));  rxPtr += 2;
-    strncpy((char *)&rxInfoData[rxPtr], rxAnt, strlen(rxAnt));      rxPtr += strlen(rxAnt);
+    *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(rxAnt));
+    rxPtr += 2;
+    strncpy((char *)&rxInfoData[rxPtr], rxAnt, strlen(rxAnt));
+    rxPtr += strlen(rxAnt);
+
     /* Padding */
-    for (int i = 0; i < rxPaddingSize; i++) {
-         *(uint8_t *)&rxInfoData[rxPtr] = (uint8_t)0;               rxPtr += 1;
+    for (int i = 0; i < ((4 - (rxPtr % 4)) % 4); i++) {
+         *(uint8_t *)&rxInfoData[rxPtr] = (uint8_t)0;
+         rxPtr += 1;
     }
 
     /* Receiver information block */
-    char txInfoData[txInfoDataSize + txPaddingSize];
+    char txInfoData[4096];  // TODO: buffer overflow issue... TESTING for now!
     uint32_t txPtr = 0;
-    *(uint8_t  *)&txInfoData[txPtr] = (uint8_t)0x50;                 txPtr += 1;
-    *(uint8_t  *)&txInfoData[txPtr] = (uint8_t)0xE3;                 txPtr += 1;
-    *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(txInfoDataSize + txPaddingSize); txPtr += 2;
-    /* Station Callsign */
-    *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(strlen(txCall));  txPtr += 2;
-    strncpy((char *)&txInfoData[txPtr], txCall, strlen(txCall));     txPtr += strlen(txCall);
-    /* Station Frequency -- Static length (4) */
-    *(uint32_t *)&txInfoData[txPtr]  = SwapEndian32(txFreq);         txPtr += 4;
-    /* Station SNR  -- Static length (1) */
-    *(uint8_t  *)&txInfoData[txPtr] = txSnr;                         txPtr += 1;
-    /* Station Mode */
-    *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(strlen(txMode));  txPtr += 2;
-    strncpy((char *)&txInfoData[txPtr], txMode, strlen(txMode));     txPtr += strlen(txMode);
-    /* Station Locator */
-    *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(strlen(txGrid));  txPtr += 2;
-    strncpy((char *)&txInfoData[txPtr], txGrid, strlen(txGrid));     txPtr += strlen(txGrid);
-    /* Station Info -- Static length (1) */
-    *(uint8_t  *)&txInfoData[txPtr] = (uint8_t)1;                    txPtr += 1;
-    /* Station Time -- Static length (4) */
-    *(uint32_t *)&txInfoData[txPtr] = SwapEndian32(unixtime);        txPtr += 4;
-    for (int i = 0; i < txPaddingSize; i++) {
-         *(uint8_t *)&txInfoData[txPtr] = (uint8_t)0;                txPtr += 1;
+
+    /* Header & length */
+    *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(0x50E3);
+    txPtr += 2;
+    txPtr += 2;  // Skip the size bloc, adjust later
+
+    for (uint32_t i = 0; i < n_results; i++) {
+        // TODO MAX_PAYLOAD_LENGTH = 1400
+
+        /* Station Callsign */
+        *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(strlen(dec_results[i].call));
+        txPtr += 2;
+        strncpy((char *)&txInfoData[txPtr], dec_results[i].call, strlen(dec_results[i].call));
+        txPtr += strlen(dec_results[i].call);
+
+        /* Station Frequency -- Static length (4) */
+        *(uint32_t *)&txInfoData[txPtr]  = SwapEndian32(dec_results[i].freq + dec_options.freq);
+        txPtr += 4;
+
+        /* Station SNR  -- Static length (1) */
+        *(uint8_t  *)&txInfoData[txPtr] = txSnr;
+        txPtr += 1;
+
+        /* Station Mode */
+        *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(strlen(txMode));
+        txPtr += 2;
+        strncpy((char *)&txInfoData[txPtr], txMode, strlen(txMode));
+        txPtr += strlen(txMode);
+
+        /* Station Locator */
+        *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(strlen(dec_results[i].loc));
+        txPtr += 2;
+        strncpy((char *)&txInfoData[txPtr], dec_results[i].loc, strlen(dec_results[i].loc));
+        txPtr += strlen(dec_results[i].loc);
+
+        /* Station Info -- Static length (1) */
+        *(uint8_t  *)&txInfoData[txPtr] = (uint8_t)1;
+        txPtr += 1;
+
+        /* Station Time -- Static length (4) */
+        *(uint32_t *)&txInfoData[txPtr] = SwapEndian32(unixtime);
+        txPtr += 4;
     }
+
+    /* Padding */
+    for (int i = 0; i < ((4 - (txPtr % 4)) % 4); i++) {
+         *(uint8_t *)&txInfoData[txPtr] = (uint8_t)0;
+         txPtr += 1;
+    }
+
+
+    /* Adjust the bloc sizes */
+    uint32_t fullBlockSize  = headerSize + sizeof(rxDescriptor) + sizeof(txDescriptor) + rxPtr + txPtr;
+    *(uint16_t *)&rxInfoData[2] = SwapEndian16(rxPtr);
+    *(uint16_t *)&txInfoData[2] = SwapEndian16(txPtr); 
+    *(uint16_t *)&headerData[2] = SwapEndian16(fullBlockSize);
 
     /* Assemble the block to send over UDP */
     char fullBlockData[fullBlockSize];
     uint32_t ptrBlock = 0;
-    memcpy(&fullBlockData[ptrBlock], headerData,       headerSize);                 ptrBlock += headerSize;
-    memcpy(&fullBlockData[ptrBlock], rxInfoDescriptor, sizeof(rxInfoDescriptor));   ptrBlock += sizeof(rxInfoDescriptor);
-    memcpy(&fullBlockData[ptrBlock], txInfoDescriptor, sizeof(txInfoDescriptor));   ptrBlock += sizeof(txInfoDescriptor);
-    memcpy(&fullBlockData[ptrBlock], rxInfoData,       rxInfoDataSize);             ptrBlock += rxInfoDataSize;
-    memcpy(&fullBlockData[ptrBlock], txInfoData,       txInfoDataSize);             ptrBlock += txInfoDataSize;
+    memcpy(&fullBlockData[ptrBlock], headerData,   headerSize);           ptrBlock += headerSize;
+    memcpy(&fullBlockData[ptrBlock], rxDescriptor, sizeof(rxDescriptor)); ptrBlock += sizeof(rxDescriptor);
+    memcpy(&fullBlockData[ptrBlock], txDescriptor, sizeof(txDescriptor)); ptrBlock += sizeof(txDescriptor);
+    memcpy(&fullBlockData[ptrBlock], rxInfoData,   rxPtr);                ptrBlock += rxPtr;
+    memcpy(&fullBlockData[ptrBlock], txInfoData,   txPtr);                ptrBlock += txPtr;
 
     /* DEBUG -- Print the block */
     for (int i = 0; i < headerSize; i++) {
@@ -474,22 +523,22 @@ void postSpots(uint32_t n_results) {
     }
     printf("\n");
 
-    for (int i = 0; i < sizeof(rxInfoDescriptor); i++) {
-        printf("%02X", *(uint8_t *)&rxInfoDescriptor[i]);
+    for (int i = 0; i < sizeof(rxDescriptor); i++) {
+        printf("%02X", *(uint8_t *)&rxDescriptor[i]);
     }
     printf("\n");
 
-    for (int i = 0; i < sizeof(txInfoDescriptor); i++) {
-        printf("%02X", *(uint8_t *)&txInfoDescriptor[i]);
+    for (int i = 0; i < sizeof(txDescriptor); i++) {
+        printf("%02X", *(uint8_t *)&txDescriptor[i]);
     }
     printf("\n");
 
-    for (int i = 0; i < rxInfoDataSize; i++) {
+    for (int i = 0; i < rxPtr; i++) {
         printf("%02X", *(uint8_t *)&rxInfoData[i]);
     }
     printf("\n");
 
-    for (int i = 0; i < txInfoDataSize; i++) {
+    for (int i = 0; i < txPtr; i++) {
         printf("%02X", *(uint8_t *)&txInfoData[i]);
     }
     printf("\n");
@@ -502,8 +551,7 @@ void postSpots(uint32_t n_results) {
 
     /* Send the block using UDP */
     char hostname[] = "report.pskreporter.info";
-    //char service[]  = "4739";
-    char service[]  = "14739";
+    char service[]  = "4739";  // 14739
 
     int sockfd;
     struct addrinfo hints;
@@ -511,8 +559,7 @@ void postSpots(uint32_t n_results) {
 
     bzero(&hints, sizeof(hints));
     hints.ai_family   = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    //hints.ai_socktype = SOCK_STREAM;
+    hints.ai_socktype = SOCK_DGRAM;  // SOCK_STREAM
 
     if (getaddrinfo(hostname, service, &hints, &rp)) {
         fprintf(stderr, "Could not resolve the pskreporter...\n");
@@ -541,8 +588,6 @@ void postSpots(uint32_t n_results) {
         return;
     }
     close(sockfd);
-
-    printf("DBG -- Packet sent\n");
 }
 
 
@@ -565,7 +610,7 @@ void webClusterSpots(uint32_t n_results) {
 
     for (uint32_t i = 0; i < n_results; i++) {
         snprintf(myCall, sizeof(myCall), "%s", dec_options.rcall);
-        snprintf(dxFreq, sizeof(dxFreq), "%8f", (float)dec_results[i].freq / 1000.0f);
+        snprintf(dxFreq, sizeof(dxFreq), "%8f", (float)(dec_results[i].freq + dec_options.freq) / 1000.0f);
         snprintf(dxCall, sizeof(dxCall), "%s", dec_results[i].call);
         snprintf(info, sizeof(info), "M2M FT8 [%s - %s]", dec_options.rloc, dec_results[i].loc);
 
@@ -607,7 +652,7 @@ void printSpots(uint32_t n_results) {
     for (uint32_t i = 0; i < n_results; i++) {
         printf("     %2d %8d %10s %6s\n",
                dec_results[i].snr,
-               dec_results[i].freq,
+               dec_results[i].freq + dec_options.freq,
                dec_results[i].call,
                dec_results[i].loc);
     }
@@ -896,10 +941,6 @@ int main(int argc, char **argv) {
     int32_t rtl_result;
     int32_t rtl_count;
     char    rtl_vendor[256], rtl_product[256], rtl_serial[256];
-
-    // DBG
-    // postSpots(1);
-    // return EXIT_SUCCESS;
 
     initrx_options();
 
