@@ -399,9 +399,9 @@ void postSpots(uint32_t n_results) {
     uint32_t headerSize     = 16;
     char headerData[headerSize];
     uint32_t hPtr = 0;
-    *(uint16_t *)&headerData[hPtr] = SwapEndian16(0x000A);          
+    *(uint16_t *)&headerData[hPtr] = SwapEndian16(0x000A);
     hPtr += 2;
-    hPtr += 2;  // Skip the size bloc, adjust later
+    hPtr += 2;  // Skip the size block, adjust later
     *(uint32_t *)&headerData[hPtr] = SwapEndian32(unixtime);
     hPtr += 4;
     *(uint32_t *)&headerData[hPtr] = SwapEndian32(sequenceNumber);
@@ -416,8 +416,8 @@ void postSpots(uint32_t n_results) {
 
     /* Header & length */
     *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(0x50E2);
-    rxPtr += 2;  // Skip the size bloc, adjust later
-    
+    rxPtr += 2;  // Skip the size block, adjust later
+
     /* Receiver Callsign */
     *(uint16_t *)&rxInfoData[rxPtr] = SwapEndian16(strlen(dec_options.rcall));
     rxPtr += 2;
@@ -455,7 +455,7 @@ void postSpots(uint32_t n_results) {
     /* Header & length */
     *(uint16_t *)&txInfoData[txPtr] = SwapEndian16(0x50E3);
     txPtr += 2;
-    txPtr += 2;  // Skip the size bloc, adjust later
+    txPtr += 2;  // Skip the size block, adjust later
 
     for (uint32_t i = 0; i < n_results; i++) {
         // TODO MAX_PAYLOAD_LENGTH = 1400
@@ -502,7 +502,7 @@ void postSpots(uint32_t n_results) {
     }
 
 
-    /* Adjust the bloc sizes */
+    /* Adjust the block sizes */
     uint32_t fullBlockSize  = headerSize + sizeof(rxDescriptor) + sizeof(txDescriptor) + rxPtr + txPtr;
     *(uint16_t *)&rxInfoData[2] = SwapEndian16(rxPtr);
     *(uint16_t *)&txInfoData[2] = SwapEndian16(txPtr); 
