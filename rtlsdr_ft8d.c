@@ -484,7 +484,7 @@ void postSpots(uint32_t n_results) {
         txPtr += 1;
 
         /* Station Time -- Static length (4) */
-        *(uint32_t *)&txInfoData[txPtr] = SwapEndian32(unixtime); // FIXME - 15sec
+        *(uint32_t *)&txInfoData[txPtr] = SwapEndian32(unixtime); // UPDATE - 15sec
         txPtr += 4;
     }
 
@@ -724,8 +724,8 @@ int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename) {
 
     /* Convert the interleaved buffer into 2 buffers */
     for (int32_t i = 0; i < recsize; i++) {
-        iSamples[i] =  filebuffer[2 * i];
-        qSamples[i] = -filebuffer[2 * i + 1];  // neg, convention used by wsprsim
+        iSamples[i] =  filebuffer[2 * i] * 0.001f;
+        qSamples[i] = -filebuffer[2 * i + 1] * 0.001f;  // neg, convention used by wsprsim
     }
 
     return recsize;
