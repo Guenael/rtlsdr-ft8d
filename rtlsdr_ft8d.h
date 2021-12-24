@@ -120,8 +120,6 @@ struct decoder_options {
     uint32_t freq;         // Dial frequency
     char     rcall[13];    // Callsign of the RX station
     char     rloc[7];      // Locator of the RX station
-    // char     date[7];      // Date & time of the processes samples
-    // char     uttime[5];    //  ''
 };
 
 struct decoder_results {
