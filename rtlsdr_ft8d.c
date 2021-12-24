@@ -391,7 +391,7 @@ void postSpots(uint32_t n_results) {
         randomId = rand();
     }
 
-    /* Constract header block */
+    /* Construct header block */
     const uint32_t headerSize     = 16;
     char headerData[headerSize];
     uint32_t hPtr = 0;
