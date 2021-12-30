@@ -30,10 +30,6 @@
 #endif
 
 
-#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
-#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
-
-
 /* Sampling definition for RTL devices & FT8 protocol */
 #define SIGNAL_LENGHT       15
 #define SIGNAL_SAMPLE_RATE  3200
@@ -67,6 +63,19 @@
  * - FFTW_EXHAUSTIVE
  */
 #define PATIENCE FFTW_ESTIMATE
+
+
+/* Debugging logs */
+#define LOG_DEBUG   0
+#define LOG_INFO    1
+#define LOG_WARN    2
+#define LOG_ERROR   3
+#define LOG_LEVEL   LOG_DEBUG
+#define LOG(level, ...)  if (level >= LOG_LEVEL) fprintf(stderr, __VA_ARGS__)
+
+
+#define safe_cond_signal(n, m) pthread_mutex_lock(m); pthread_cond_signal(n); pthread_mutex_unlock(m)
+#define safe_cond_wait(n, m) pthread_mutex_lock(m); pthread_cond_wait(n, m); pthread_mutex_unlock(m)
 
 
 /* Thread for decoding */
@@ -107,11 +116,13 @@ struct receiver_options {
     int32_t  upconverter;
     int32_t  directsampling;
     int32_t  maxloop;
+    int32_t  nloop;
     int32_t  device;
+    bool     noreport;
     bool     selftest;
     bool     writefile;
     bool     readfile;
-    char     filename[33];
+    char     *filename;
 };
 
 
@@ -145,8 +156,9 @@ void initFFTW();
 void freeFFTW();
 int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename);
 int32_t writeRawIQfile(float *iSamples, float *qSamples, char *filename);
+int32_t readC2file(float *iSamples, float *qSamples, char *filename);
 void decodeRecordedFile(char *filename);
 float whiteGaussianNoise(float factor);
 int32_t decoderSelfTest();
-void usage(void);
+void usage(FILE *stream, int32_t status);
 void ft8_subsystem(float *iSamples, float *qSamples, uint32_t samples_len, struct decoder_results *decodes, int32_t *n_results);
