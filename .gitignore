@@ -1,6 +1,4 @@
-*.1
 *.o
-*.gz
 *.iq
 *.c2
 rtlsdr_ft8d
