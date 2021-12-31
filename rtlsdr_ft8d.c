@@ -996,7 +996,7 @@ void usage(FILE *stream, int32_t status) {
             "\t--help show list of options\n"
             "\t--version show version of program\n"
             "Example:\n"
-            "\rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29\n");
+            "\trtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29\n");
     exit(status);
 }
 
@@ -1025,7 +1025,7 @@ int main(int argc, char **argv) {
     uint32_t nLoop = 0;
 
     if (argc <= 1)
-        usage(stderr, 1);
+        usage(stdout, EXIT_SUCCESS);
 
     while ((opt = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
         switch (opt) {
