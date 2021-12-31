@@ -23,6 +23,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
+#include <getopt.h>
 #include <sys/time.h>
 #include <pthread.h>
 #include <assert.h>
@@ -48,7 +49,7 @@ static struct decoder_thread decThread;
 
 
 /* Thread for RX (blocking function used) & RTL struct */
-static pthread_t rxThread;
+static pthread_t     rxThread;
 static rtlsdr_dev_t *rtl_device = NULL;
 
 
@@ -64,6 +65,11 @@ struct receiver_state   rx_state;
 struct receiver_options rx_options;
 struct decoder_options  dec_options;
 struct decoder_results  dec_results[50];
+
+
+/* Could be nice to update this one with the CI */
+const char rtlsdr_ft8d_version[] = "0.3.6";
+const char pskreporter_app_version[]  = "rtlsdr-ft8d_v0.3.6";
 
 
 /* Callback for each buffer received */
@@ -218,14 +224,43 @@ static void *decoder(void *arg) {
     while (!rx_state.exit_flag) {
         safe_cond_wait(&decThread.ready_cond, &decThread.ready_mutex);
 
+        LOG(LOG_DEBUG, "Decoder thread -- Got a signal!\n");
+
         if (rx_state.exit_flag)
             break;  /* Abort case, final sig */
 
         /* Select the previous transmission / other buffer */
         uint32_t prevBuffer = (rx_state.bufferIndex + 1) % 2;
 
-        if (rx_state.iqIndex[prevBuffer] < ( (SIGNAL_LENGHT - 3) * SIGNAL_SAMPLE_RATE ) )
+        if (rx_state.iqIndex[prevBuffer] < ( (SIGNAL_LENGHT - 3) * SIGNAL_SAMPLE_RATE ) ) {
+            LOG(LOG_DEBUG, "Decoder thread -- Signal too short, skipping!\n");
             continue;  /* Partial buffer during the first RX, skip it! */
+        } else {
+            rx_options.nloop++; /* Decoding this signal, count it! */
+        }
+
+        /* Delete any previous samples tail */
+        for (int i = rx_state.iqIndex[prevBuffer]; i < SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE; i++) {
+            rx_state.iSamples[prevBuffer][i] = 0.0;
+            rx_state.qSamples[prevBuffer][i] = 0.0;
+        }
+
+        /* Normalize the sample @-3dB */
+        float maxSig = 1e-24f;
+        for (int i = 0; i < SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE; i++) {
+            float absI = fabs(rx_state.iSamples[prevBuffer][i]);
+            float absQ = fabs(rx_state.qSamples[prevBuffer][i]);
+
+            if (absI > maxSig)
+                maxSig = absI;
+            if (absQ > maxSig)
+                maxSig = absQ;
+        }
+        maxSig = 0.5 / maxSig;
+        for (int i = 0; i < SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE; i++) {
+            rx_state.iSamples[prevBuffer][i] *= maxSig;
+            rx_state.qSamples[prevBuffer][i] *= maxSig;
+        }
 
         /* Get the date at the beginning last recording session
            with 1 second margin added, just to be sure to be on 15 alignment
@@ -241,7 +276,7 @@ static void *decoder(void *arg) {
                       SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE,
                       dec_results,
                       &n_results);
-
+        LOG(LOG_DEBUG, "Decoder thread -- Decoding completed\n");
         saveSample(rx_state.iSamples[prevBuffer], rx_state.qSamples[prevBuffer]);
         postSpots(n_results);
         printSpots(n_results);
@@ -255,6 +290,7 @@ void initSampleStorage() {
     rx_state.bufferIndex = 0;
     rx_state.iqIndex[0]  = 0;
     rx_state.iqIndex[1]  = 0;
+    rx_state.exit_flag   = false;
 }
 
 
@@ -266,10 +302,12 @@ void initrx_options() {
     rx_options.shift          = 0;
     rx_options.directsampling = 0;
     rx_options.maxloop        = 0;
+    rx_options.nloop          = 0;
     rx_options.device         = 0;
     rx_options.selftest       = false;
     rx_options.writefile      = false;
     rx_options.readfile       = false;
+    rx_options.noreport       = false;
 }
 
 
@@ -325,13 +363,19 @@ inline uint32_t SwapEndian32(uint32_t val) {
  *   https://pskreporter.info/pskmap.html
  */
 void postSpots(uint32_t n_results) {
+    return;  // No feedback from the community, no idea if it works, DISABLED for now
+
+    if (rx_options.noreport) {
+        LOG(LOG_DEBUG, "Decoder thread -- Skipping the reporting\n");
+        return;
+    }
+
     /* Send the block using UDP to this server */
     const char hostname[] = "report.pskreporter.info";
     const char service[]  = "4739";
 
-    /* Fixed strings for Mode & application name */
+    /* Fixed strings for Mode */
     const char txMode[]   = "FT8";
-    const char rxApp[]    = "rtlsdr-ft8d_v0.3.5";
 
     /* Frame description */
     const unsigned char rxDescriptor[] = {
@@ -428,10 +472,10 @@ void postSpots(uint32_t n_results) {
     rxPtr += strlen(dec_options.rloc);
 
     /* Application used by RX */
-    *(uint8_t  *)&rxInfoData[rxPtr] = (uint8_t)strlen(rxApp);
+    *(uint8_t  *)&rxInfoData[rxPtr] = (uint8_t)strlen(pskreporter_app_version);
     rxPtr += 1;
-    strncpy((char *)&rxInfoData[rxPtr], rxApp, strlen(rxApp));
-    rxPtr += strlen(rxApp);
+    strncpy((char *)&rxInfoData[rxPtr], pskreporter_app_version, strlen(pskreporter_app_version));
+    rxPtr += strlen(pskreporter_app_version);
 
     /* Padding */
     if ((rxPtr % 4) > 0)
@@ -548,6 +592,11 @@ void postSpots(uint32_t n_results) {
 
 /* Report on a WebCluster -- Ex. RBN Network */
 void webClusterSpots(uint32_t n_results) {
+    if (rx_options.noreport) {
+        LOG(LOG_DEBUG, "Decoder thread -- Skipping the reporting\n");
+        return;
+    }
+
     /* No spot to report, simply skip */
     if (n_results == 0) {
         return;
@@ -701,31 +750,31 @@ int32_t readRawIQfile(float *iSamples, float *qSamples, char *filename) {
         return 0;
     }
 
-    /* Get the size of the file */
-    fseek(fd, 0L, SEEK_END);
-    int32_t recsize = ftell(fd) / (2 * sizeof(float));
-    fseek(fd, 0L, SEEK_SET);
-
-
-    /* Limit the file/buffer to the max samples */
-    if (recsize > SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) {
-        recsize = SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE;
-    }
-
     /* Read the IQ file */
-    int32_t nread = fread(filebuffer, sizeof(float), 2 * recsize, fd);
-    if (nread != 2 * recsize) {
-        fprintf(stderr, "Cannot read all the data! %d\n", nread);
-        fclose(fd);
-        return 0;
-    } else {
-        fclose(fd);
-    }
+    int32_t nread = fread(filebuffer, sizeof(float), 2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE, fd);
+    int32_t recsize = nread / 2;
 
     /* Convert the interleaved buffer into 2 buffers */
     for (int32_t i = 0; i < recsize; i++) {
-        iSamples[i] =  filebuffer[2 * i] * 0.001f;
-        qSamples[i] = -filebuffer[2 * i + 1] * 0.001f;  // neg, convention used by wsprsim
+        iSamples[i] =  filebuffer[2 * i];
+        qSamples[i] = -filebuffer[2 * i + 1];  // neg, convention used by wsprsim
+    }
+
+    /* Normalize the sample @-3dB */
+    float maxSig = 1e-24f;
+    for (int i = 0; i < recsize; i++) {
+        float absI = fabs(iSamples[i]);
+        float absQ = fabs(qSamples[i]);
+
+        if (absI > maxSig)
+            maxSig = absI;
+        if (absQ > maxSig)
+            maxSig = absQ;
+    }
+    maxSig = 0.5 / maxSig;
+    for (int i = 0; i <recsize; i++) {
+        iSamples[i] *= maxSig;
+        qSamples[i] *= maxSig;
     }
 
     return recsize;
@@ -757,13 +806,71 @@ int32_t writeRawIQfile(float *iSamples, float *qSamples, char *filename) {
 }
 
 
+int32_t readC2file(float *iSamples, float *qSamples, char *filename) {
+    float filebuffer[2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE];
+    FILE *fd = fopen(filename, "rb");
+    int32_t nread;
+    double frequency;
+    int    type;
+    char   name[15];
+
+    if (fd == NULL) {
+        fprintf(stderr, "Cannot open data file...\n");
+        return 0;
+    }
+
+    /* Read the header */
+    nread = fread(name, sizeof(char), 14, fd);
+    nread = fread(&type, sizeof(int), 1, fd);
+    nread = fread(&frequency, sizeof(double), 1, fd);
+    rx_options.dialfreq = frequency;
+
+    /* Read the IQ file */
+    nread = fread(filebuffer, sizeof(float), 2 * SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE, fd);
+    int32_t recsize = nread / 2;
+
+    /* Convert the interleaved buffer into 2 buffers */
+    for (int32_t i = 0; i < recsize; i++) {
+        iSamples[i] =  filebuffer[2 * i];
+        qSamples[i] = -filebuffer[2 * i + 1];  // neg, convention used by wsprsim
+    }
+
+    /* Normalize the sample @-3dB */
+    float maxSig = 1e-24f;
+    for (int i = 0; i < recsize; i++) {
+        float absI = fabs(iSamples[i]);
+        float absQ = fabs(qSamples[i]);
+
+        if (absI > maxSig)
+            maxSig = absI;
+        if (absQ > maxSig)
+            maxSig = absQ;
+    }
+    maxSig = 0.5 / maxSig;
+    for (int i = 0; i <recsize; i++) {
+        iSamples[i] *= maxSig;
+        qSamples[i] *= maxSig;
+    }
+
+    return recsize;
+}
+
+
 void decodeRecordedFile(char *filename) {
     static float iSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
     static float qSamples[SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE] = {0};
     static uint32_t samples_len;
     int32_t n_results = 0;
 
-    samples_len = readRawIQfile(iSamples, qSamples, filename);
+    if (strcmp(&filename[strlen(filename)-3], ".iq") == 0) {
+        samples_len = readRawIQfile(iSamples, qSamples, filename);
+    } else if (strcmp(&filename[strlen(filename)-3], ".c2") == 0) {
+        samples_len = readC2file(iSamples, qSamples, filename);
+    } else {
+        fprintf(stderr, "Not a valid extension!! (only .iq & .c2 files)\n");
+        return;
+    }
+
     printf("Number of samples: %d\n", samples_len);
 
     if (samples_len) {
@@ -860,8 +967,8 @@ int32_t decoderSelfTest() {
 }
 
 
-void usage(void) {
-    fprintf(stderr,
+void usage(FILE *stream, int32_t status) {
+    fprintf(stream,
             "rtlsdr_ft8d, a simple FT8 daemon for RTL receivers\n\n"
             "Use:\rtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
             "\t-f dial frequency [(,k,M) Hz] or band string\n"
@@ -880,18 +987,29 @@ void usage(void) {
             "\t-n max iterations (default: 0 = infinite loop)\n"
             "\t-i device index (in case of multiple receivers, default: 0)\n"
             "Debugging options:\n"
+            "\t-x do not report any spots on web clusters (WSPRnet, PSKreporter...)\n"
             "\t-t decoder self-test (generate a signal & decode), no parameter\n"
             "\t-w write received signal and exit [filename prefix]\n"
-            "\t-r read signal, decode and exit [filename]\n"
-            "\t   (raw format: 3200sps, float 32 bits, 2 channels)\n"
+            "\t-r read signal with .iq or .c2 format, decode and exit [filename]\n"
+            "\t   (raw format: 375sps, float 32 bits, 2 channels)\n"
+            "Other options:\n"
+            "\t--help show list of options\n"
+            "\t--version show version of program\n"
             "Example:\n"
             "\rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29\n");
-    exit(1);
+    exit(status);
 }
 
 
 int main(int argc, char **argv) {
     uint32_t opt;
+    char    *short_options = "f:c:l:g:ao:p:u:d:n:i:xtw:r:";
+    int32_t  option_index = 0;
+    struct option long_options[] = {
+        {"help",    no_argument, 0, 0 },
+        {"version", no_argument, 0, 0 },
+        {0, 0, 0, 0 }
+    };
 
     int32_t rtl_result;
     int32_t rtl_count;
@@ -907,31 +1025,61 @@ int main(int argc, char **argv) {
     uint32_t nLoop = 0;
 
     if (argc <= 1)
-        usage();
+        usage(stderr, 1);
 
-    while ((opt = getopt(argc, argv, "f:c:l:g:ao:p:u:d:n:i:tw:r:")) != -1) {
+    while ((opt = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
         switch (opt) {
+            case 0:
+                switch (option_index) {
+                    case 0:  // --help
+                        usage(stdout, EXIT_SUCCESS);
+                        break;
+                    case 1:  // --version
+                        printf("rtlsdr_ft8d v%s\n", rtlsdr_ft8d_version);
+                        exit(EXIT_FAILURE);
+                        break;
+                }
             case 'f':  // Frequency
                 if (!strcasecmp(optarg, "160m")) {
                     rx_options.dialfreq = 1840000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "80m")) {
                     rx_options.dialfreq = 3573000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "60m")) {
                     rx_options.dialfreq = 5357000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "40m")) {
                     rx_options.dialfreq = 7074000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "30m")) {
                     rx_options.dialfreq = 10136000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "20m")) {
                     rx_options.dialfreq = 14074000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "17m")) {
                     rx_options.dialfreq = 18100000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "15m")) {
                     rx_options.dialfreq = 21074000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "12m")) {
                     rx_options.dialfreq = 24915000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "10m")) {
                     rx_options.dialfreq = 28074000;
+                    if (!rx_options.directsampling)
+                        rx_options.directsampling = 2;
                 } else if (!strcasecmp(optarg, "6m")) {
                     rx_options.dialfreq = 50313000;
                 } else if (!strcasecmp(optarg, "4m")) {
@@ -981,60 +1129,42 @@ int main(int argc, char **argv) {
             case 'i':  // Select the device to use
                 rx_options.device = (uint32_t)atofs(optarg);
                 break;
+            case 'x':  // Decoder option, single pass mode (same as original wsprd)
+                rx_options.noreport = true;
+                break;
             case 't':  // Seft test (used in unit-test CI pipeline)
                 rx_options.selftest = true;
                 break;
             case 'w':  // Read a signal and decode
                 rx_options.writefile = true;
-                snprintf(rx_options.filename, sizeof(rx_options.filename), "%.32s", optarg);
+                rx_options.filename = optarg;
                 break;
             case 'r':  // Write a signal and exit
                 rx_options.readfile = true;
-                snprintf(rx_options.filename, sizeof(rx_options.filename), "%.32s", optarg);
+                rx_options.filename = optarg;
                 break;
             default:
-                usage();
+                usage(stderr, EXIT_FAILURE);
                 break;
         }
-    }
-
-    if (rx_options.selftest == true) {
-        if (decoderSelfTest()) {
-            fprintf(stdout, "Self-test SUCCESS!\n");
-            exit(0);
-        }
-        else {
-            fprintf(stderr, "Self-test FAILED!\n");
-            exit(1);
-        }
-    }
-
-    if (rx_options.readfile == true) {
-        fprintf(stdout, "Reading IQ file: %s\n", rx_options.filename);
-        decodeRecordedFile(rx_options.filename);
-        exit(0);
-    }
-
-    if (rx_options.writefile == true) {
-        fprintf(stdout, "Saving IQ file planned with prefix: %.8s\n", rx_options.filename);
     }
 
     if (rx_options.dialfreq == 0) {
         fprintf(stderr, "Please specify a dial frequency.\n");
         fprintf(stderr, " --help for usage...\n");
-        exit(1);
+        return EXIT_FAILURE;
     }
 
     if (dec_options.rcall[0] == 0) {
         fprintf(stderr, "Please specify your callsign.\n");
         fprintf(stderr, " --help for usage...\n");
-        exit(1);
+        return EXIT_FAILURE;
     }
 
     if (dec_options.rloc[0] == 0) {
         fprintf(stderr, "Please specify your locator.\n");
         fprintf(stderr, " --help for usage...\n");
-        exit(1);
+        return EXIT_FAILURE;
     }
 
     /* Calcule shift offset */
@@ -1042,6 +1172,27 @@ int main(int argc, char **argv) {
 
     /* Store the frequency used for the decoder */
     dec_options.freq = rx_options.dialfreq;
+
+    if (rx_options.selftest == true) {
+        if (decoderSelfTest()) {
+            fprintf(stdout, "Self-test SUCCESS!\n");
+            return EXIT_SUCCESS;
+        }
+        else {
+            fprintf(stderr, "Self-test FAILED!\n");
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (rx_options.readfile == true) {
+        fprintf(stdout, "Reading IQ file: %s\n", rx_options.filename);
+        decodeRecordedFile(rx_options.filename);
+        return EXIT_SUCCESS;
+    }
+
+    if (rx_options.writefile == true) {
+        fprintf(stdout, "Saving IQ file planned with prefix: %.8s\n", rx_options.filename);
+    }
 
     /* If something goes wrong... */
     signal(SIGINT,  &sigint_callback_handler);
@@ -1142,8 +1293,8 @@ int main(int argc, char **argv) {
 
 
     /* Print used parameter */
-    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version 0.3.5\n",
-           gtm->tm_year + 1900, gtm->tm_mon + 1, gtm->tm_mday, gtm->tm_hour, gtm->tm_min);
+    printf("\nStarting rtlsdr-ft8d (%04d-%02d-%02d, %02d:%02dz) -- Version %s\n",
+           gtm->tm_year + 1900, gtm->tm_mon + 1, gtm->tm_mday, gtm->tm_hour, gtm->tm_min, rtlsdr_ft8d_version);
     printf("  Callsign     : %s\n", dec_options.rcall);
     printf("  Locator      : %s\n", dec_options.rloc);
     printf("  Dial freq.   : %d Hz\n", rx_options.dialfreq);
@@ -1180,33 +1331,35 @@ int main(int argc, char **argv) {
     pthread_create(&decThread.thread, &decThread.attr, decoder, NULL);
 
     /* Main loop : Wait, read, decode */
-    while (!rx_state.exit_flag && !(rx_options.maxloop && (nLoop >= rx_options.maxloop))) {
+    while (!rx_state.exit_flag && !(rx_options.maxloop && (rx_options.nloop >= rx_options.maxloop))) {
         /* Wait for time Sync on 15 secs */
         gettimeofday(&lTime, NULL);
         sec   = lTime.tv_sec % 15;
         usec  = sec * 1000000 + lTime.tv_usec;
         uwait = 15000000 - usec;
+        LOG(LOG_DEBUG, "Main thread -- Waiting %d seconds\n", uwait/1000000);
         usleep(uwait);
+        LOG(LOG_DEBUG, "Main thread -- Sending a GO to the decoder thread\n");
 
         /* Switch to the other buffer and trigger the decoder */
         rx_state.bufferIndex = (rx_state.bufferIndex + 1) % 2;
         rx_state.iqIndex[rx_state.bufferIndex] = 0;
         safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
-
-        nLoop++;
+        usleep(100000); /* Give a chance to the other thread to update the nloop counter */
     }
+
+    /* Stop the decoder thread */
+    rx_state.exit_flag = true;
+    safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
 
     /* Stop the RX and free the blocking function */
     rtlsdr_cancel_async(rtl_device);
-
-    /* Close the RTL device */
     rtlsdr_close(rtl_device);
 
     /* Free FFTW buffers */
     freeFFTW();
 
     /* Wait the thread join (send a signal before to terminate the job) */
-    safe_cond_signal(&decThread.ready_cond, &decThread.ready_mutex);
     pthread_join(decThread.thread, NULL);
     pthread_join(rxThread, NULL);
 
