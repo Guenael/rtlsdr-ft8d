@@ -13,8 +13,7 @@ RUN apt-get update && \
     libcurl4-openssl-dev \
     libfftw3-dev \
     libusb-1.0-0-dev \
-    pkg-config \
-    help2man && \
+    pkg-config && \
   rm -rf /var/lib/apt/lists/*
 
 RUN git clone https://github.com/steve-m/librtlsdr.git /root/librtlsdr && \

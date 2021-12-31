@@ -38,7 +38,7 @@ jobs:
     - name: Install dependencies and build
       run: |
         sudo apt-get -y update
-        sudo apt-get -y install build-essential cmake libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev help2man
+        sudo apt-get -y install build-essential cmake libfftw3-dev libusb-1.0-0-dev librtlsdr-dev libcurl4-gnutls-dev
         make
 
     - name: SAST check (C/C++ code analysis)
