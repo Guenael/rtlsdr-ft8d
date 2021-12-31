@@ -28,5 +28,5 @@ install:
 	install rtlsdr_ft8d.1.gz /usr/local/man/man1/rtlsdr_ft8d.1.gz
 
 %.1: %.c | %
-	-help2man --no-info --output=$@ ./$|
+	-help2man --no-info --no-discard-stderr --output=$@ ./$|
 	gzip rtlsdr_ft8d.1
