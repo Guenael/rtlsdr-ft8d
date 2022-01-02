@@ -43,7 +43,7 @@ rtlsdr_ft8d -f 2m -c A1XYZ -l AB12cd -g 29
 
 ## Overview
 
-This non-interactive application allows automatic reporting of FT8 messages on Internet with [PSKreporter](https://pskreporter.info/pskmap.html). The inital idea was to allow a small computer like a Raspberry Pi and a RTL-SDR device to send FT8 reports for [VHF/UHF](https://en.wikipedia.org/wiki/Amateur_radio_frequency_allocations#Very_high_frequencies_and_ultra_high_frequencies) bands. This kind of lightweight setup could run continuously without maintenance and help to get additionnal propagation reports. This code is just a glue between RTL libs and an FT8 open source library based on [Karlis Goba (YL3JG) work](https://github.com/kgoba/ft8_lib).
+This non-interactive application allows automatic reporting of FT8 messages on Internet with [PSKreporter](https://pskreporter.info/pskmap.html). The initial idea was to allow a small computer like a Raspberry Pi and a RTL-SDR device to send FT8 reports for [VHF/UHF](https://en.wikipedia.org/wiki/Amateur_radio_frequency_allocations#Very_high_frequencies_and_ultra_high_frequencies) bands. This kind of lightweight setup could run continuously without maintenance and help to get additional propagation reports. This code is just a glue between RTL libs and an FT8 open source library based on [Karlis Goba (YL3JG) work](https://github.com/kgoba/ft8_lib).
 
 This application written in C does:
 
@@ -104,7 +104,7 @@ This application written in C does:
 
 ## Container Image
 
-As an alterative to the above steps, a pre-built container image containing rtlsdr-ft8d is available for use with [Docker](https://www.docker.com/) or [Podman](https://podman.io/).
+As an alternative to the above steps, a pre-built container image containing rtlsdr-ft8d is available for use with [Docker](https://www.docker.com/) or [Podman](https://podman.io/).
 
 The RTL DVB kernel modules must first be blacklisted on the host running the container. RTL-SDR itself is not required on the host running the container. This can be permanently accomplished using the following commands:
 
