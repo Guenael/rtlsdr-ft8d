@@ -877,6 +877,11 @@ void decodeRecordedFile(char *filename) {
         /* Search & decode the signal */
         ft8_subsystem(iSamples, qSamples, samples_len, dec_results, &n_results);
 
+        time_t unixtime;
+        time ( &unixtime );
+        unixtime = unixtime - 120 + 1;
+        rx_state.gtm = gmtime( &unixtime );
+
         printSpots(n_results);
     }
 }
