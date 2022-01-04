@@ -1,15 +1,13 @@
 # rtlsdr-ft8d -- FT8 daemon for RTL receivers
 
-**WORK IN PROGRESS -- Need help for testing this project**
-- **Automated reporting not yet working**
-- **Possible +1500 Hz shift from the dial frequency**
-
 ![rtlsdr-wsprd](art/rtlsdr-ft8d-web.jpg)
 
 ![Project Status](https://img.shields.io/badge/status-OK-green)
 ![Workflow Status](https://img.shields.io/github/workflow/status/Guenael/rtlsdr-ft8d/CI)
 ![Last commit](https://img.shields.io/github/last-commit/Guenael/rtlsdr-ft8d)
 ![Commit activity](https://img.shields.io/github/commit-activity/m/Guenael/rtlsdr-ft8d)
+
+**PROJECT STALLED -- Need help to test this project (automated reporting disabled for now)**
 
 ## TL;DR
 
@@ -18,7 +16,7 @@ To install and use your dongle on a Raspberry Pi with a Raspberry Pi OS, follow 
 
 ```bash
 echo "== Install dependencies"
-sudo apt-get update && sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev libcurl4-gnutls-dev help2man ntp git
+sudo apt-get update && sudo apt-get -y install build-essential clang cmake libfftw3-dev libusb-1.0-0-dev libcurl4-gnutls-dev ntp git
 
 echo "== Install rtl-sdr library (on RPi, don't use your distro package)"
 git clone https://github.com/steve-m/librtlsdr
@@ -51,7 +49,7 @@ This application written in C does:
 - Start the reception using the RTL lib
 - Decimate the IQ data (2.4Msps to 3200 sps)
 - Decode FT8 signals
-- Report any spots on PSKreporter
+- Report any spots on PSKreporter (disable for now!)
 - Repeat, again and again...
 
 
@@ -150,10 +148,10 @@ Some performance tests using:
 - rtlsdr-ft8d version 0.3.4
 - Build with `clang -O3 -std=gnu17`
 
-| Hardware  | Supported          | RX Load | Decode burst |
-| --------- | ------------------ | ------- | ------------ |
-| RPi-1     | :heavy_check_mark: | 24.4%   | 650ms        |
-| RPi-2     | :heavy_check_mark: | 13.9%   | 290ms        |
-| RPi-3     | :heavy_check_mark: |  9.4%   | 210ms        |
-| RPi-4     | :heavy_check_mark: |  6.3%   | 120ms        |
-| i7-5820K  | :heavy_check_mark: |  1.8%   |  18ms        |
+| Hardware      | Supported          | RX Load | Decode burst |
+| ------------- | ------------------ | ------- | ------------ |
+| RPi-1         | :heavy_check_mark: | 24.4%   | 650ms        |
+| RPi-2         | :heavy_check_mark: | 13.9%   | 290ms        |
+| RPi-3         | :heavy_check_mark: |  9.4%   | 210ms        |
+| RPi-4         | :heavy_check_mark: |  6.3%   | 120ms        |
+| PC (i7-5820K) | :heavy_check_mark: |  1.8%   |  18ms        |
