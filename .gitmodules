@@ -1,3 +1,3 @@
 [submodule "ft8_lib"]
 	path = ft8_lib
-	url = git://github.com/kgoba/ft8_lib
+	url = https://github.com/kgoba/ft8_lib.git
