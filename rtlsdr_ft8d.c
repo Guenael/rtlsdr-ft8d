@@ -975,7 +975,7 @@ int32_t decoderSelfTest() {
 void usage(FILE *stream, int32_t status) {
     fprintf(stream,
             "rtlsdr_ft8d, a simple FT8 daemon for RTL receivers\n\n"
-            "Use:\rtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
+            "Use: rtlsdr_ft8d -f frequency -c callsign -l locator [options]\n"
             "\t-f dial frequency [(,k,M) Hz] or band string\n"
             "\t   If band string is used, the default dial frequency will used.\n"
             "\t   Bands: 160m 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m 1m25 70cm 23cm\n"
@@ -988,7 +988,7 @@ void usage(FILE *stream, int32_t status) {
             "\t-o frequency offset (default: 0)\n"
             "\t-p crystal correction factor (ppm) (default: 0)\n"
             "\t-u upconverter (default: 0, example: 125M)\n"
-            "\t-d direct dampling [0,1,2] (default: 0, 1 for I input, 2 for Q input)\n"
+            "\t-d direct sampling [0,1,2] (default: 0, 1 for I input, 2 for Q input)\n"
             "\t-n max iterations (default: 0 = infinite loop)\n"
             "\t-i device index (in case of multiple receivers, default: 0)\n"
             "Debugging options:\n"
