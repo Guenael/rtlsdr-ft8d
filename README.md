@@ -23,7 +23,7 @@ git clone https://github.com/steve-m/librtlsdr
 cd rtl-sdr
 mkdir -p make
 cd make
-cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DDETACH_KERNEL_DRIVER=ON -Wno-dev ..
+cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DDETACH_KERNEL_DRIVER=ON -DINSTALL_UDEV_RULES=ON -DENABLE_ZEROCOPY=ON -Wno-dev ..
 make
 sudo make install
 cd ../..
